@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0a47ca404a6e13b4f98f1e2f92b894c2, type: 3}
+  m_Name: StonePickaxe
+  m_EditorClassIdentifier: 
+  id: stone_pickaxe
+  displayName: Stone Pickaxe
+  description: A crude but honest mining tool. Breaks stone; embarrasses sand.
+  icon: {fileID: 21300000, guid: bffb7c106031f334ea770937b9974719, type: 3}
+  category: 1
+  maxStackSize: 1
+  weightKg: 3
+  worldModelPrefab: {fileID: 0}
+  isWeapon: 0
+  weaponDamage: 0
+  damageType: 0
+  attacksPerSecond: 1
+  attackRange: 2
+  attackClip: {fileID: 0}
+  isTool: 1
+  toolType: 2
+  toolTier: 1
+  miningSpeedMultiplier: 4
+  miningRadius: 0.55
+  efficientBlocks:
+  - {fileID: 11400000, guid: 4450bf46e5c590040a708f7fdba43565, type: 2}
+  holdType: 1
+  holdSocket: 0
+  holdLocalPosition: {x: 0, y: 0, z: 0}
+  holdLocalRotationEuler: {x: 0, y: 0, z: 0}
+  placedBlock: {fileID: 0}
+  placedPiece: {fileID: 0}

@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0a47ca404a6e13b4f98f1e2f92b894c2, type: 3}
+  m_Name: Log
+  m_EditorClassIdentifier: 
+  id: log
+  displayName: Log
+  description: "A freshly felled tree trunk. Heavy \u2014 sprinting with a few of
+    these is not happening."
+  icon: {fileID: 21300000, guid: bd77514d0dddab04cb97cebc441cac70, type: 3}
+  category: 0
+  maxStackSize: 4
+  weightKg: 10
+  worldModelPrefab: {fileID: 0}
+  isWeapon: 0
+  weaponDamage: 0
+  isTool: 0
+  toolTier: 0
+  miningSpeedMultiplier: 1
+  holdType: 0
+  holdSocket: 0
+  placedBlock: {fileID: 0}

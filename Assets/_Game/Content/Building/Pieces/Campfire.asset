@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a95501b2095fc364d8f4c24c143f6e6a, type: 3}
+  m_Name: Campfire
+  m_EditorClassIdentifier: 
+  id: campfire
+  displayName: Campfire
+  description: A stone fire pit. Feed it wood (interact while holding logs or planks),
+    light it for warmth and light.
+  category: 8
+  icon: {fileID: 21300000, guid: 4c303b26576709e4d89a7f4294f634d6, type: 3}
+  prefab: {fileID: 5982797640860946585, guid: c187882078b4bf84c8b21b0d5b21ed6d, type: 3}
+  sockets: []
+  materialCost: []
+  maxHealth: 100
