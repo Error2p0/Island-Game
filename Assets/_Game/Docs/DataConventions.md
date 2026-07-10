@@ -321,6 +321,38 @@ unused value/bit, never reorder, renumber or delete entries.**
 - Leaf texture is opaque on purpose: the transparent submesh alpha-BLENDS
   (water shares it) and holed blended quads sort badly — a dedicated
   alpha-clip leaf material is noted for the visual content pass.
+## Day/night cycle (Sky Phase 7)
+
+- `IslandGame.Sky` (Scripts/Sky): `TimeOfDayController` is the ONE clock —
+  normalized TimeOfDay01 (0 = midnight, 0.25 = sunrise, 0.5 = noon, 0.75 =
+  sunset), configurable Day Length Minutes, `OnSunrise`/`OnDayStart`/
+  `OnSunset`/`OnNightStart` events (fire on natural crossings, including
+  several in one fast-forwarded frame; `SetTimeOfDay` jumps fire NOTHING by
+  design — consumers re-read `IsNight`/`TimeOfDay01`). Future systems
+  (spawns, campfire auto-light) subscribe here, never roll their own clock.
+- `DayNightVisuals` derives everything visible from sun elevation: sun/moon
+  directional lights (exactly ONE shadow caster at a time; moon shadowless),
+  gradient skybox colors + celestial disk (doubles as sun and moon), trilight
+  ambient, linear fog (closes in at night). All smooth functions — no
+  keyframes.
+- Sky rendering: custom `IslandGame/SkyGradient` skybox shader (chosen over
+  built-in Skybox/Procedural for full scripted control of night palette and
+  dusk horizon glow). Stars: `StarField` procedural quad dome (seeded, ~900
+  stars, vertex-color brightness/tint) + additive `IslandGame/Stars` shader
+  at Queue Transparent-100 — AFTER the skybox (URP draws skyboxes late; a
+  Background-queue dome would be overwritten), depth-tested so terrain
+  occludes. Dome follows the camera's POSITION only.
+- Both material assets (`Content/Sky/{SkyGradient,Stars}.mat`) are
+  INSTANTIATED at runtime before per-frame writes — never dirty assets.
+- **Playability exposure choice**: night ambient floors at ~8-10% gray-blue
+  (never black) + 0.22 moon light — dark and moody but navigable; placed
+  light sources (campfire) are what actually carve visibility at night.
+- Scene setup: **Island Game → World → Create Day Night Cycle** (also a
+  Build Everything step) — builds DayNight/Sun/Moon/Stars, assigns skybox +
+  ambient + fog to the scene lighting settings, and DISABLES any other
+  directional lights (they would fight the cycle). Debug: F10 pause, hold
+  F11 fast-forward, context-menu time jumps on TimeOfDayController.
+
 ## Cross-links between items and blocks
 
 - Block → item: `BlockDefinition.DropItem` + `DropCountMin/Max` (what mining yields).

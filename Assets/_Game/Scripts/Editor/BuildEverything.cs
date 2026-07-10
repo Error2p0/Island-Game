@@ -67,6 +67,7 @@ namespace IslandGame.EditorTools
                 ("Build creative menu UI", CreativeMenuUIBuilder.Build),
                 ("Create voxel world", VoxelWorldBuilder.Create),
                 ("Add building system to player", BuildingSystemBuilder.Create),
+                ("Create day/night cycle", DayNightBuilder.Create),
                 ("Build crafting menu UI", CraftingMenuUIBuilder.Build),
                 ("Place player at spawn", PlacePlayerAtSpawn),
             };
