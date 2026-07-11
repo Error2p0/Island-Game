@@ -63,6 +63,7 @@ namespace IslandGame.EditorTools.Data
             EditorApplication.update -= DriveRepaint;
             AssemblyReloadEvents.beforeAssemblyReload -= AutoSaveBeforeReload;
             preview.Dispose();
+            inspectorPanel.Dispose();
         }
 
         private void OnFocus()

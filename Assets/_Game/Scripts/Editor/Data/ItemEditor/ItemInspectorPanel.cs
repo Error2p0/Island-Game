@@ -20,12 +20,19 @@ namespace IslandGame.EditorTools.Data
         private readonly EditorWindow owner;
         private readonly EfficientBlocksSelector efficientBlocks = new EfficientBlocksSelector();
         private readonly AdvancedDropdownState placedBlockDropdownState = new AdvancedDropdownState();
+        private readonly TextureGeneratorSection iconGenerator = new TextureGeneratorSection();
 
         private Vector2 scroll;
 
         public ItemInspectorPanel(EditorWindow owner)
         {
             this.owner = owner;
+        }
+
+        /// <summary>Releases the icon generator's preview texture — the window calls this from OnDisable.</summary>
+        public void Dispose()
+        {
+            iconGenerator.Dispose();
         }
 
         public void OnGUI(
@@ -89,6 +96,7 @@ namespace IslandGame.EditorTools.Data
 
             EditorGUILayout.PropertyField(serialized.FindProperty("description"));
             EditorGUILayout.PropertyField(serialized.FindProperty("icon"));
+            iconGenerator.DrawIconSection(session);
             EditorGUILayout.PropertyField(serialized.FindProperty("category"));
             EditorGUILayout.PropertyField(serialized.FindProperty("maxStackSize"));
             EditorGUILayout.PropertyField(serialized.FindProperty("weightKg"));

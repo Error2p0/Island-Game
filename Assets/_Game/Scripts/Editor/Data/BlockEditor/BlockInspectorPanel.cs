@@ -19,12 +19,19 @@ namespace IslandGame.EditorTools.Data
 
         private readonly EditorWindow owner;
         private readonly AdvancedDropdownState dropItemDropdownState = new AdvancedDropdownState();
+        private readonly TextureGeneratorSection textureGenerator = new TextureGeneratorSection();
 
         private Vector2 scroll;
 
         public BlockInspectorPanel(EditorWindow owner)
         {
             this.owner = owner;
+        }
+
+        /// <summary>Releases the texture generator's preview texture — the window calls this from OnDisable.</summary>
+        public void Dispose()
+        {
+            textureGenerator.Dispose();
         }
 
         public void OnGUI(
@@ -132,6 +139,8 @@ namespace IslandGame.EditorTools.Data
                 "Block textures must be imported with Read/Write enabled (runtime atlas packing reads their " +
                 "pixels). Missing textures show as magenta/black in the preview and in-game.",
                 MessageType.None);
+
+            textureGenerator.DrawBlockSection(session);
         }
 
         private void DrawFaceCell(BlockEditSession session, SerializedObject serialized, BlockFace face)

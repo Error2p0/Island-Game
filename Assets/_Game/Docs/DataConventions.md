@@ -353,6 +353,41 @@ unused value/bit, never reorder, renumber or delete entries.**
   directional lights (they would fight the cycle). Debug: F10 pause, hold
   F11 fast-forward, context-menu time jumps on TimeOfDayController.
 
+## Procedural textures (Texturing Phase 8)
+
+- `IslandGame.Texturing` (Scripts/Texturing) is the pure, RUNTIME-CALLABLE
+  core: `TextureSynth.GeneratePixels(style, baseColor, size, seed, hueShift)`
+  and `GenerateIconPixels(shape, primary, secondary, size, seed)` —
+  deterministic functions (same params + seed = same pixels, forever). Static
+  class by design: no per-asset state to serialize, callers own the parameter
+  tuples. Each `TextureStyle` (Stone/Wood/Sand/Grass/Metal/Fabric/Foliage/
+  Liquid) is a DISTINCT algorithm (mottle+cracks, grain columns+knots,
+  speckle+ripples, blade strokes, brushed rows+sheen, weave threads, leaf
+  blobs+gaps, depth gradient+glints) — never one noise recolored.
+- **Sizes**: block textures default 16×16 (matches all existing content, the
+  atlas "one common size" rule, and sub-voxel UV slicing — res-8 sub-faces
+  sample 2×2 texel windows); icons 64×64. Both enums are append-only.
+- Variation = base color (free) + `TexturePalettes` named presets per style
+  (Oak/Birch/Pine, Granite/Basalt/..., the requirement-3 palette-swap list)
+  + hue-shift slider + seed.
+- Persisting is EDITOR-side: `GeneratedTextureAssets.WriteBlockTexture` /
+  `WriteIconSprite` write real .png assets — Point filter, uncompressed, no
+  mips; block textures Read/Write enabled (atlas), icons as Sprites.
+  OVERWRITE semantics at stable paths (`gen_<id>.png` / `gen_icon_<id>.png`)
+  so re-rolling a texture never dangles references — the one deliberate
+  exception to creators-never-overwrite, because regeneration is the point.
+- Editor UX: "Auto-Generate Texture" in the Block Editor's Textures section
+  and "Auto-Generate Icon" in the Item Editor's General section (shared
+  `TextureGeneratorSection`): live point-filtered preview on every param
+  change; Generate writes the .png immediately but ASSIGNS through the
+  session buffer — Save/Revert semantics hold for the definition itself.
+- Icons are flat two-tone silhouettes + 1 px outline (`IconShape`:
+  RoundedSquare, Circle, Pickaxe, Axe, Sword, Droplet, Ingot; "Match
+  Category" suggests one from ItemCategory) — material noise alone doesn't
+  read at UI sizes.
+- The Phase 9 batch content pass calls `TextureSynth` +
+  `GeneratedTextureAssets` directly — same pipeline, no interactive UI.
+
 ## Cross-links between items and blocks
 
 - Block → item: `BlockDefinition.DropItem` + `DropCountMin/Max` (what mining yields).
