@@ -14,8 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   id: pine
   displayName: Pine Tree
-  trunkBlock: {fileID: 11400000, guid: e99ae51ee4c05934eb3bd02e94999a1c, type: 2}
-  leavesBlock: {fileID: 11400000, guid: 9f03c7a6f238e2d4da4ef9598cce6902, type: 2}
+  trunkBlock: {fileID: 11400000, guid: d62588b6e9bf6444397a0d8e6b1a8ba0, type: 2}
+  leavesBlock: {fileID: 11400000, guid: a394bfe70efa9d4438496c8d73c24587, type: 2}
   resolution: 4
   spawnWeight: 0.7
   strokes:

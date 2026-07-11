@@ -1,0 +1,49 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0a47ca404a6e13b4f98f1e2f92b894c2, type: 3}
+  m_Name: WoodenShovel
+  m_EditorClassIdentifier: 
+  id: wooden_shovel
+  displayName: Wooden Shovel
+  description: Tier 1 shovel.
+  icon: {fileID: 21300000, guid: 03c5c6b1e04cc644b8d439cc4470d959, type: 3}
+  category: 1
+  maxStackSize: 1
+  weightKg: 2
+  worldModelPrefab: {fileID: 0}
+  isWeapon: 0
+  weaponDamage: 0
+  damageType: 0
+  attacksPerSecond: 1
+  attackRange: 2
+  attackClip: {fileID: 0}
+  isRangedWeapon: 0
+  projectileSpeed: 30
+  ammoItem: {fileID: 0}
+  isTool: 1
+  toolType: 3
+  toolTier: 1
+  miningSpeedMultiplier: 2.5
+  miningRadius: 0.45
+  efficientBlocks:
+  - {fileID: 11400000, guid: 2f176694c5ffaa84d81a8e82d083e203, type: 2}
+  - {fileID: 11400000, guid: 00f9535f71ed5b04ba7bf705d8fa9992, type: 2}
+  - {fileID: 11400000, guid: 2ccc23cd155fa784dacaff137cc5b76c, type: 2}
+  - {fileID: 11400000, guid: b6c5840a11ea133489e408dc2779d96f, type: 2}
+  - {fileID: 11400000, guid: 6b5697670c47acd4db72a7c072db307b, type: 2}
+  holdType: 1
+  holdSocket: 0
+  holdLocalPosition: {x: 0, y: 0, z: 0}
+  holdLocalRotationEuler: {x: 0, y: 0, z: 0}
+  placedBlock: {fileID: 0}
+  hungerRestore: 0
+  placedPiece: {fileID: 0}

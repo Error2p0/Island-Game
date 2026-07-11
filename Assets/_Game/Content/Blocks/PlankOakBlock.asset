@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f5f8f6806b2fb694da2669cf85e95cb7, type: 3}
+  m_Name: PlankOakBlock
+  m_EditorClassIdentifier: 
+  id: plank_oak
+  displayName: Oak Planks
+  useUniformTexture: 1
+  uniformTexture: {fileID: 2800000, guid: 3366bba7175395c4fb28b3daff8b676b, type: 3}
+  topTexture: {fileID: 0}
+  bottomTexture: {fileID: 0}
+  northTexture: {fileID: 0}
+  southTexture: {fileID: 0}
+  eastTexture: {fileID: 0}
+  westTexture: {fileID: 0}
+  isSolid: 1
+  isTransparent: 0
+  hardness: 1.2
+  requiredToolTier: 0
+  dropItem: {fileID: 11400000, guid: 80351ee75ef6d7845a3b670490718a33, type: 2}
+  dropCountMin: 1
+  dropCountMax: 1
+  behaviorFlags: 4

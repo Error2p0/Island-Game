@@ -52,6 +52,13 @@ namespace IslandGame.EditorTools
                 Debug.Log("Building System: added PlayerInteraction (E — functional placeables) to the player.");
             }
 
+            if (player.GetComponent<PlayerStats>() == null)
+            {
+                Undo.AddComponent<PlayerStats>(player.gameObject);
+                changed = true;
+                Debug.Log("Building System: added PlayerStats (hunger + eat-on-use) to the player.");
+            }
+
             if (Object.FindFirstObjectByType<PlacedPieceRegistry>() == null)
             {
                 var registryObject = new GameObject("PlacedPieces");

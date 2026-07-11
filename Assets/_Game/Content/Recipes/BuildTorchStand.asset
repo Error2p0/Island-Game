@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c26b4d9473b1344a8cec5b15c3cdd7a, type: 3}
+  m_Name: BuildTorchStand
+  m_EditorClassIdentifier: 
+  id: build_torch_stand
+  displayName: Torch Stand
+  output: {fileID: 0}
+  outputCount: 1
+  outputPiece: {fileID: 11400000, guid: 95aa9ba57a40b904180b2d4be2c9a85e, type: 2}
+  ingredients:
+  - item: {fileID: 11400000, guid: b6f3a68f5c42ac5449120e4acb6af445, type: 2}
+    count: 2
+  - item: {fileID: 11400000, guid: f9c7ab88be0bf314882b9647ee4e6679, type: 2}
+    count: 1
+  station: 0
+  craftSeconds: 0

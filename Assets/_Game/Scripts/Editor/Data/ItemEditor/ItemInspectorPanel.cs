@@ -103,6 +103,9 @@ namespace IslandGame.EditorTools.Data
             EditorGUILayout.PropertyField(serialized.FindProperty("worldModelPrefab"));
 
             var category = (ItemCategory)serialized.FindProperty("category").intValue;
+            if (category == ItemCategory.Consumable)
+                EditorGUILayout.PropertyField(serialized.FindProperty("hungerRestore"));
+
             if (category == ItemCategory.Block || category == ItemCategory.Placeable)
             {
                 DrawPlacedBlockField(session, serialized, allBlocks, blockDatabaseAvailable);
@@ -169,6 +172,17 @@ namespace IslandGame.EditorTools.Data
                 EditorGUILayout.PropertyField(serialized.FindProperty("attacksPerSecond"));
                 EditorGUILayout.PropertyField(serialized.FindProperty("attackRange"));
                 EditorGUILayout.PropertyField(serialized.FindProperty("attackClip"));
+
+                SerializedProperty isRanged = serialized.FindProperty("isRangedWeapon");
+                EditorGUILayout.PropertyField(isRanged);
+                if (isRanged.boolValue)
+                {
+                    using (new EditorGUI.IndentLevelScope())
+                    {
+                        EditorGUILayout.PropertyField(serialized.FindProperty("projectileSpeed"));
+                        EditorGUILayout.PropertyField(serialized.FindProperty("ammoItem"));
+                    }
+                }
             }
         }
 

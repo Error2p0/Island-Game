@@ -13,10 +13,21 @@ MonoBehaviour:
   m_Name: BuildingPieceDatabase
   m_EditorClassIdentifier: 
   definitions:
+  - {fileID: 11400000, guid: 6d733ada77f827c40a8848c7fecf2d35, type: 2}
+  - {fileID: 11400000, guid: 50798fee351ade54db4d12534444a75c, type: 2}
   - {fileID: 11400000, guid: 46f0ad7f4b8e9f84e82e0a1a5dfa6a81, type: 2}
+  - {fileID: 11400000, guid: 3fb22f2c33e5b654e8f14b929d607599, type: 2}
   - {fileID: 11400000, guid: fb328c8129857804db2d070b7069da8c, type: 2}
+  - {fileID: 11400000, guid: e4025864724b9434a823bf4450aa72be, type: 2}
+  - {fileID: 11400000, guid: 65a2e4ee4fc9ce449910bdfedaf53c90, type: 2}
   - {fileID: 11400000, guid: 841f4c6f553ddbf499a25b6da99f730b, type: 2}
   - {fileID: 11400000, guid: 8069f447e0f43c4418be654983a378ec, type: 2}
+  - {fileID: 11400000, guid: 30bfbf273de61514f898d280733b029c, type: 2}
+  - {fileID: 11400000, guid: ce3fa05e649621f4280db5a3c0dccb47, type: 2}
+  - {fileID: 11400000, guid: c6cb97cb1df518e429ce7677272651b1, type: 2}
   - {fileID: 11400000, guid: 4f80bc311ebf68c4497c9c22fe4bfd16, type: 2}
+  - {fileID: 11400000, guid: dc0c4e6ee359c4d479dd7387ded44436, type: 2}
+  - {fileID: 11400000, guid: 95aa9ba57a40b904180b2d4be2c9a85e, type: 2}
   - {fileID: 11400000, guid: b4510d9d160fb6b44808a67c6fa8a472, type: 2}
+  - {fileID: 11400000, guid: 5f73fcb5a97729248b5378e3d36e3a34, type: 2}
   - {fileID: 11400000, guid: b38cbdadfd25b3142954df0549d33b1a, type: 2}

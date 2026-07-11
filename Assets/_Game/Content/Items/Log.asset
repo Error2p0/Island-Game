@@ -17,15 +17,29 @@ MonoBehaviour:
   description: "A freshly felled tree trunk. Heavy \u2014 sprinting with a few of
     these is not happening."
   icon: {fileID: 21300000, guid: bd77514d0dddab04cb97cebc441cac70, type: 3}
-  category: 0
+  category: 4
   maxStackSize: 4
   weightKg: 10
   worldModelPrefab: {fileID: 0}
   isWeapon: 0
   weaponDamage: 0
+  damageType: 0
+  attacksPerSecond: 1
+  attackRange: 2
+  attackClip: {fileID: 0}
+  isRangedWeapon: 0
+  projectileSpeed: 30
+  ammoItem: {fileID: 0}
   isTool: 0
+  toolType: 0
   toolTier: 0
   miningSpeedMultiplier: 1
+  miningRadius: 0
+  efficientBlocks: []
   holdType: 0
   holdSocket: 0
-  placedBlock: {fileID: 0}
+  holdLocalPosition: {x: 0, y: 0, z: 0}
+  holdLocalRotationEuler: {x: 0, y: 0, z: 0}
+  placedBlock: {fileID: 11400000, guid: 1e44b8f61f3c53a4bad2635664d5557c, type: 2}
+  hungerRestore: 0
+  placedPiece: {fileID: 0}

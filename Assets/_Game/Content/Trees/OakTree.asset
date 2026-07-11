@@ -14,8 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   id: oak
   displayName: Oak Tree
-  trunkBlock: {fileID: 11400000, guid: e99ae51ee4c05934eb3bd02e94999a1c, type: 2}
-  leavesBlock: {fileID: 11400000, guid: 9f03c7a6f238e2d4da4ef9598cce6902, type: 2}
+  trunkBlock: {fileID: 11400000, guid: 1e44b8f61f3c53a4bad2635664d5557c, type: 2}
+  leavesBlock: {fileID: 11400000, guid: caa3f2156c4793a48af694833f2cb66c, type: 2}
   resolution: 4
   spawnWeight: 1
   strokes:

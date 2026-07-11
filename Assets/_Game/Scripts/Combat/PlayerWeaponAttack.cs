@@ -36,6 +36,7 @@ namespace IslandGame.Combat
         private PlayerReferences references;
         private ItemHoldController holdController;
         private HotbarSelector selector;
+        private InventorySystem inventory;
 
         private float nextSwingTime;
         private float nextHitTime;
@@ -45,6 +46,7 @@ namespace IslandGame.Combat
             references = GetComponent<PlayerReferences>();
             holdController = GetComponent<ItemHoldController>();
             selector = GetComponent<HotbarSelector>();
+            inventory = GetComponent<InventorySystem>();
         }
 
         private void Update()
@@ -73,8 +75,31 @@ namespace IslandGame.Combat
             if (equipped.IsWeapon && Time.time >= nextHitTime)
             {
                 nextHitTime = Time.time + interval;
-                TryHit(equipped);
+                if (equipped.IsRangedWeapon)
+                    TryShoot(equipped);
+                else
+                    TryHit(equipped);
             }
+        }
+
+        /// <summary>
+        /// Ranged branch (bow): consumes one ammo item when the weapon names
+        /// one (no ammo = no shot, the cadence slot is still spent so holding
+        /// the button doesn't spam checks), then launches a Projectile from
+        /// the camera. Damage/type/cadence come from the same weapon fields
+        /// melee uses — ranged only changes the delivery.
+        /// </summary>
+        private void TryShoot(ItemDefinition weapon)
+        {
+            if (weapon.AmmoItem != null
+                && (inventory == null || inventory.RemoveItem(weapon.AmmoItem, 1) == 0))
+                return; // out of arrows
+
+            Transform origin = references.CameraPivot;
+            Projectile.Spawn(
+                origin.position + origin.forward * 0.45f, origin.forward,
+                weapon.ProjectileSpeed, weapon.WeaponDamage, weapon.DamageType,
+                gameObject, transform);
         }
 
         private readonly RaycastHit[] castBuffer = new RaycastHit[16];

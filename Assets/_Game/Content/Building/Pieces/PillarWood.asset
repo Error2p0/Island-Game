@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a95501b2095fc364d8f4c24c143f6e6a, type: 3}
+  m_Name: PillarWood
+  m_EditorClassIdentifier: 
+  id: pillar_wood
+  displayName: Support Pillar
+  description: A 2 m post. Holds floors where walls would be in the way.
+  category: 7
+  icon: {fileID: 21300000, guid: 451930db24d00eb40b56825537b72730, type: 3}
+  prefab: {fileID: 5327661706569426027, guid: 4c8151b60576ed140a28eff3f34bbca1, type: 3}
+  sockets:
+  - socketName: bottom
+    localPosition: {x: 0, y: 0, z: 0}
+    localRotationEuler: {x: 0, y: 180, z: 0}
+    tag: wall_bottom
+    acceptedTags:
+    - foundation_top
+    - wall_top
+  - socketName: top
+    localPosition: {x: 0, y: 2, z: 0}
+    localRotationEuler: {x: 0, y: 0, z: 0}
+    tag: wall_top
+    acceptedTags:
+    - wall_bottom
+    - floor_edge
+    - roof_bottom
+  materialCost: []
+  maxHealth: 300

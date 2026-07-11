@@ -388,6 +388,38 @@ unused value/bit, never reorder, renumber or delete entries.**
 - The Phase 9 batch content pass calls `TextureSynth` +
   `GeneratedTextureAssets` directly — same pipeline, no interactive UI.
 
+## Base content set (Content Phase 9)
+
+- **Island Game → Data → Generate Base Content Set** is the reviewable,
+  rerunnable batch pass (BaseContentSetGenerator + ContentSetItemsAndBlocks/
+  Placeables/Recipes). Contract: DEFINITIONS create-if-missing (hand edits
+  survive), TEXTURES regenerate every run (per-ID seeds → byte-identical
+  unless the generator code changed), plus guarded targeted MIGRATIONS
+  (stone_pickaxe tier 1→2, log item gains PlacedBlock, tree templates move
+  from generic wood/leaves onto oak/pine variants).
+- **Tier ladder** (permission = RequiredToolTier): 0 hands (dirt/sand/logs/
+  leaves/planks/clay/snow) · 1 wood tools (stone/cobble/cut/brick/ice) ·
+  2 stone tools (copper+tin ore) · 3 copper tools (silver ore).
+- **Stations**: hand → Campfire (cooking) → Workbench (stone gear, building,
+  bow) → Furnace (NEW CraftingStationType, appended; ore → bars). The
+  furnace prefab is the campfire pattern (CampfireBehavior fuel/fire) + a
+  Furnace CraftingStationMarker.
+- **New runtime hooks** (all complete, minimal): `PlayerStats` (hunger drain,
+  `RestoreHunger`, eats the equipped Consumable on the use/place button —
+  `ItemDefinition.HungerRestore`); ranged weapons (`IsRangedWeapon`/
+  `ProjectileSpeed`/`AmmoItem` on ItemDefinition, `Projectile` manual-flight
+  raycast arrows, ammo consumed per shot); `ChestBehavior` (owns a real
+  `InventorySystem` — deposit equipped stack / withdraw on empty hand; the
+  container UI pass will bind the existing grid view to `Storage`);
+  `DoorBehavior` (root-at-hinge swing; the leaf's door_hinge socket mates
+  the Phase 1 doorway socket); `BedBehavior` (night-only skip to morning via
+  TimeOfDayController.SetTimeOfDay); `BoatBehavior` (possession = disable
+  PlayerLocomotion + CharacterController, parent to seat, drive via
+  MoveInput; kinematic waterline hold, beach-blocking; snaps up to the water
+  surface on placement since liquids have no colliders).
+- Starvation consequences, boat physics, container UI and world models for
+  tools are the noted follow-ups — the hooks exist, nothing is stubbed.
+
 ## Cross-links between items and blocks
 
 - Block → item: `BlockDefinition.DropItem` + `DropCountMin/Max` (what mining yields).

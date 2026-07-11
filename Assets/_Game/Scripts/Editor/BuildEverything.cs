@@ -60,6 +60,7 @@ namespace IslandGame.EditorTools
                 ("Create tree content (wood/leaves blocks + templates)", ExampleTreeContentCreator.Create),
                 ("Create example recipes (+ Stone Pickaxe)", ExampleRecipeCreator.Create),
                 ("Create example building pieces", ExampleBuildingPieceCreator.Create),
+                ("Generate base content set", BaseContentSetGenerator.Run),
                 ("Build player rig", PlayerRigBuilder.BuildPlayerRig),
                 ("Build player animations & controller", PlayerAnimationBuilder.Build),
                 ("Create hold sockets", HoldSocketBuilder.Create),

@@ -68,6 +68,16 @@ namespace IslandGame.Data.Items
         [Tooltip("Swing animation for the upper-body layer. Reference only — animator wiring happens in the held-item phase.")]
         [SerializeField] private AnimationClip attackClip;
 
+        [Tooltip("True: the use button FIRES A PROJECTILE (bow-style) instead of the melee sphere-cast. Damage/type/cadence come from the fields above.")]
+        [SerializeField] private bool isRangedWeapon;
+
+        [Tooltip("Projectile launch speed, m/s. Only read when Is Ranged Weapon is true.")]
+        [Min(1f)]
+        [SerializeField] private float projectileSpeed = 30f;
+
+        [Tooltip("Item consumed from the inventory per shot (arrows). Null = fires for free.")]
+        [SerializeField] private ItemDefinition ammoItem;
+
         [Header("Tool (authored via the Item Editor from Phase 3)")]
         [Tooltip("True if this item can mine/harvest blocks.")]
         [SerializeField] private bool isTool;
@@ -105,6 +115,11 @@ namespace IslandGame.Data.Items
         [Tooltip("For Block/Placeable items: the voxel block placed in the terrain when this item is used. This is the item→block half of the link; BlockDefinition.DropItem is the block→item half.")]
         [SerializeField] private BlockDefinition placedBlock;
 
+        [Header("Consumable")]
+        [Tooltip("Hunger restored when eaten (category Consumable; the use/place button eats one unit — see PlayerStats). 0 = not edible.")]
+        [Min(0f)]
+        [SerializeField] private float hungerRestore;
+
         [Header("Building Placement")]
         [Tooltip("For Placeable items: the building piece this item lets the player place (ghost preview + snapping while equipped). Same item→placed convention as Placed Block — set one or the other, never both.")]
         [SerializeField] private BuildingPieceDefinition placedPiece;
@@ -127,6 +142,13 @@ namespace IslandGame.Data.Items
         public float AttacksPerSecond => attacksPerSecond;
         public float AttackRange => attackRange;
         public AnimationClip AttackClip => attackClip;
+
+        public bool IsRangedWeapon => isRangedWeapon;
+        public float ProjectileSpeed => projectileSpeed;
+        public ItemDefinition AmmoItem => ammoItem;
+
+        /// <summary>Hunger restored when eaten; 0 = not edible.</summary>
+        public float HungerRestore => hungerRestore;
 
         public bool IsTool => isTool;
         public ToolType ToolType => toolType;

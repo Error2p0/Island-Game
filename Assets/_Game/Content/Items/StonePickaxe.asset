@@ -26,9 +26,12 @@ MonoBehaviour:
   attacksPerSecond: 1
   attackRange: 2
   attackClip: {fileID: 0}
+  isRangedWeapon: 0
+  projectileSpeed: 30
+  ammoItem: {fileID: 0}
   isTool: 1
   toolType: 2
-  toolTier: 1
+  toolTier: 2
   miningSpeedMultiplier: 4
   miningRadius: 0.55
   efficientBlocks:
@@ -38,4 +41,5 @@ MonoBehaviour:
   holdLocalPosition: {x: 0, y: 0, z: 0}
   holdLocalRotationEuler: {x: 0, y: 0, z: 0}
   placedBlock: {fileID: 0}
+  hungerRestore: 0
   placedPiece: {fileID: 0}

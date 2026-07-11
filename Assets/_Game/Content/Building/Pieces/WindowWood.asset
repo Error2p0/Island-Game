@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a95501b2095fc364d8f4c24c143f6e6a, type: 3}
+  m_Name: WindowWood
+  m_EditorClassIdentifier: 
+  id: window_wood
+  displayName: Wooden Window
+  description: "A wall piece with a view \u2014 and an arrow slit when it matters."
+  category: 5
+  icon: {fileID: 21300000, guid: 3303bb3e7fbecca44a6f11be980953b5, type: 3}
+  prefab: {fileID: 7417180065539452891, guid: e038828e84bdce7439ebfe9d24365d27, type: 3}
+  sockets:
+  - socketName: bottom
+    localPosition: {x: 0, y: 0, z: 0}
+    localRotationEuler: {x: 0, y: 180, z: 0}
+    tag: wall_bottom
+    acceptedTags:
+    - foundation_top
+    - wall_top
+  - socketName: top
+    localPosition: {x: 0, y: 2, z: 0}
+    localRotationEuler: {x: 0, y: 0, z: 0}
+    tag: wall_top
+    acceptedTags:
+    - wall_bottom
+    - floor_edge
+    - roof_bottom
+  - socketName: side_east
+    localPosition: {x: 1, y: 1, z: 0}
+    localRotationEuler: {x: 0, y: 90, z: 0}
+    tag: wall_side
+    acceptedTags:
+    - wall_side
+  - socketName: side_west
+    localPosition: {x: -1, y: 1, z: 0}
+    localRotationEuler: {x: 0, y: 270, z: 0}
+    tag: wall_side
+    acceptedTags:
+    - wall_side
+  materialCost: []
+  maxHealth: 220

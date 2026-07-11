@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a95501b2095fc364d8f4c24c143f6e6a, type: 3}
+  m_Name: FenceWood
+  m_EditorClassIdentifier: 
+  id: fence_wood
+  displayName: Wooden Fence
+  description: Keeps things out. Or in. Chains end to end.
+  category: 9
+  icon: {fileID: 21300000, guid: b8e06848d315c1645ad77bddff13a7c5, type: 3}
+  prefab: {fileID: 8169805428421421159, guid: 311e1847248e9574b9b27fdfe2056be8, type: 3}
+  sockets:
+  - socketName: bottom
+    localPosition: {x: 0, y: 0, z: 0}
+    localRotationEuler: {x: 0, y: 180, z: 0}
+    tag: wall_bottom
+    acceptedTags:
+    - foundation_top
+  - socketName: side_east
+    localPosition: {x: 1, y: 0.5, z: 0}
+    localRotationEuler: {x: 0, y: 90, z: 0}
+    tag: fence_side
+    acceptedTags:
+    - fence_side
+  - socketName: side_west
+    localPosition: {x: -1, y: 0.5, z: 0}
+    localRotationEuler: {x: 0, y: 270, z: 0}
+    tag: fence_side
+    acceptedTags:
+    - fence_side
+  materialCost: []
+  maxHealth: 120

@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c26b4d9473b1344a8cec5b15c3cdd7a, type: 3}
+  m_Name: BuildWindowWood
+  m_EditorClassIdentifier: 
+  id: build_window_wood
+  displayName: Wooden Window
+  output: {fileID: 0}
+  outputCount: 1
+  outputPiece: {fileID: 11400000, guid: 5f73fcb5a97729248b5378e3d36e3a34, type: 2}
+  ingredients:
+  - item: {fileID: 11400000, guid: b6f3a68f5c42ac5449120e4acb6af445, type: 2}
+    count: 5
+  station: 1
+  craftSeconds: 0

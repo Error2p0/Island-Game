@@ -13,5 +13,8 @@ namespace IslandGame.Data.Crafting
         Workbench = 1,
         Forge = 2,
         Campfire = 3,
+
+        /// <summary>Smelting station (ore → bars). Forge above stays reserved for a future anvil/smithing tier.</summary>
+        Furnace = 4,
     }
 }
