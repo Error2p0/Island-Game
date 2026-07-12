@@ -37,6 +37,7 @@ namespace IslandGame.EditorTools.Data
             SyncDatabase<TreeTemplateDefinition, TreeTemplateDatabase>("TreeTemplateDatabase");
             SyncDatabase<StatDefinition, StatDatabase>("StatDatabase");
             SyncDatabase<CreatureDefinition, CreatureDatabase>("CreatureDatabase");
+            SyncDatabase<StructureTemplate, StructureTemplateDatabase>("StructureTemplateDatabase");
             AssetDatabase.SaveAssets();
         }
 
@@ -156,7 +157,7 @@ namespace IslandGame.EditorTools.Data
             return type == typeof(ItemDefinition) || type == typeof(BlockDefinition)
                 || type == typeof(RecipeDefinition) || type == typeof(BuildingPieceDefinition)
                 || type == typeof(TreeTemplateDefinition) || type == typeof(StatDefinition)
-                || type == typeof(CreatureDefinition);
+                || type == typeof(CreatureDefinition) || type == typeof(StructureTemplate);
         }
     }
 }

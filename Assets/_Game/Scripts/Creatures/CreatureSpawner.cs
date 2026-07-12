@@ -100,6 +100,20 @@ namespace IslandGame.Creatures
             definition = creatureDefinition;
         }
 
+        /// <summary>
+        /// Full runtime configuration for programmatically placed spawners
+        /// (structure guards, future world-gen dens) — the code path
+        /// equivalent of authoring the serialized fields.
+        /// </summary>
+        public void Configure(
+            CreatureDefinition creatureDefinition, int population, float radius, bool onlyAtNight = false)
+        {
+            definition = creatureDefinition;
+            maxPopulation = Mathf.Clamp(population, 1, 20);
+            spawnRadius = Mathf.Max(2f, radius);
+            spawnOnlyAtNight = onlyAtNight;
+        }
+
         private void Start()
         {
             timeOfDay = FindFirstObjectByType<TimeOfDayController>();

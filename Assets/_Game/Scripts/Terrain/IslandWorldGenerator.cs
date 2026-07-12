@@ -194,6 +194,30 @@ namespace IslandGame.Terrain
             }
         }
 
+        // ------------------------------------------------------------------
+        // World-data access for the structures phase (READ-ONLY — the noise
+        // and island shaping above are untouched; structures only sample the
+        // same height/biome data trees already use).
+        // ------------------------------------------------------------------
+
+        /// <summary>Water surface height, for beach/water site rules.</summary>
+        public int SeaLevelY => seaLevel;
+
+        /// <summary>Columns topping out within this band of sea level are sand (the tree/structure 'not grass' rule).</summary>
+        public int BeachBandSize => beachBand;
+
+        /// <summary>Terrain height at a column — the same pure function chunk filling uses. Valid after Initialize.</summary>
+        public int SampleHeight(float worldX, float worldZ)
+        {
+            return ComputeColumnHeight(worldX, worldZ);
+        }
+
+        /// <summary>The generator's deterministic seeded hash, shared so structure placement is a pure function of the world seed too.</summary>
+        public float SampleHash01(int x, int z, int salt)
+        {
+            return Hash01(x, z, salt);
+        }
+
         public void Generate(Chunk chunk)
         {
             if (stoneId == BlockPalette.AirId)

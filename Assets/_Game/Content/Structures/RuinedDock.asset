@@ -1,0 +1,79 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 373a74645fd01d8428a34b405c13d13a, type: 3}
+  m_Name: RuinedDock
+  m_EditorClassIdentifier: 
+  id: ruined_dock
+  displayName: Wrecked Dock
+  description: A storm-broken pier reaching into the shallows. Whoever built it left
+    in a hurry.
+  pieces:
+  - piece: {fileID: 11400000, guid: 8069f447e0f43c4418be654983a378ec, type: 2}
+    localPosition: {x: 0, y: -0.55, z: 0}
+    localYawDegrees: 0
+    omitChance: 0
+  - piece: {fileID: 11400000, guid: 841f4c6f553ddbf499a25b6da99f730b, type: 2}
+    localPosition: {x: 0, y: 0, z: 1}
+    localYawDegrees: 0
+    omitChance: 0
+  - piece: {fileID: 11400000, guid: 841f4c6f553ddbf499a25b6da99f730b, type: 2}
+    localPosition: {x: 0, y: 0, z: 3}
+    localYawDegrees: 0
+    omitChance: 0.25
+  - piece: {fileID: 11400000, guid: 841f4c6f553ddbf499a25b6da99f730b, type: 2}
+    localPosition: {x: 0, y: 0, z: 5}
+    localYawDegrees: 0
+    omitChance: 0.3
+  - piece: {fileID: 11400000, guid: 841f4c6f553ddbf499a25b6da99f730b, type: 2}
+    localPosition: {x: 0, y: 0, z: 7}
+    localYawDegrees: 0
+    omitChance: 0.35
+  - piece: {fileID: 11400000, guid: 841f4c6f553ddbf499a25b6da99f730b, type: 2}
+    localPosition: {x: 2, y: 0, z: 5}
+    localYawDegrees: 0
+    omitChance: 0.5
+  - piece: {fileID: 11400000, guid: fb328c8129857804db2d070b7069da8c, type: 2}
+    localPosition: {x: 0, y: 0, z: 1}
+    localYawDegrees: 0
+    omitChance: 0.5
+  chests:
+  - chestPiece: {fileID: 11400000, guid: 3fb22f2c33e5b654e8f14b929d607599, type: 2}
+    localPosition: {x: 0, y: 0.05, z: 7}
+    localYawDegrees: 90
+    loot:
+    - item: {fileID: 11400000, guid: b6f3a68f5c42ac5449120e4acb6af445, type: 2}
+      countMin: 6
+      countMax: 14
+      dropChance: 1
+    - item: {fileID: 11400000, guid: d84711f5156d5ec4aa7d7c8eb10158f5, type: 2}
+      countMin: 2
+      countMax: 5
+      dropChance: 0.7
+    - item: {fileID: 11400000, guid: f9c7ab88be0bf314882b9647ee4e6679, type: 2}
+      countMin: 1
+      countMax: 2
+      dropChance: 0.6
+    - item: {fileID: 11400000, guid: fb10bdc9049667d48aca5b271b67f3f9, type: 2}
+      countMin: 5
+      countMax: 12
+      dropChance: 0.5
+    - item: {fileID: 11400000, guid: d39ed8fb9349fb24a92ef2e7b2a1dac9, type: 2}
+      countMin: 1
+      countMax: 1
+      dropChance: 0.3
+  spawners: []
+  surface: 1
+  footprintRadius: 4
+  maxHeightVariance: 3
+  spawnWeight: 1
+  coastSeawardExtent: 9
+  coastOriginAboveSea: 0.6

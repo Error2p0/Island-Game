@@ -79,6 +79,13 @@ namespace IslandGame.Terrain
         /// <summary>Sub-cells per block axis used for NEW promotions (existing grids keep theirs).</summary>
         public int SubVoxelResolution => subVoxelResolution;
 
+        /// <summary>True once Start resolved the databases and generator — consumers (structure placement) wait on this.</summary>
+        public bool IsReady => initialized;
+
+        /// <summary>The procedural generator when active; null in debug-flat mode (structures don't place there).</summary>
+        public IslandWorldGenerator ActiveIslandGenerator =>
+            initialized && !useDebugFlatGenerator ? islandGenerator : null;
+
         private void Start()
         {
             BlockDatabase database = BlockDatabase.Instance;

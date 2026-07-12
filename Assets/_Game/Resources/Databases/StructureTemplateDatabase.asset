@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c0b49a31b3de40b4a8a1b181f65260f8, type: 3}
+  m_Name: StructureTemplateDatabase
+  m_EditorClassIdentifier: 
+  definitions:
+  - {fileID: 11400000, guid: 5cc09eb350b41534eadf5ad8978033aa, type: 2}
+  - {fileID: 11400000, guid: 9d0284f6f897f35479e10b87f3406890, type: 2}
+  - {fileID: 11400000, guid: e1f7665666ec63d4b848e6d6bfc46172, type: 2}

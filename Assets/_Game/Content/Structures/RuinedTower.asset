@@ -1,0 +1,135 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 373a74645fd01d8428a34b405c13d13a, type: 3}
+  m_Name: RuinedTower
+  m_EditorClassIdentifier: 
+  id: ruined_tower
+  displayName: Ruined Watchtower
+  description: A collapsed stone-and-timber watch post. Something nests in it now.
+  pieces:
+  - piece: {fileID: 11400000, guid: 8069f447e0f43c4418be654983a378ec, type: 2}
+    localPosition: {x: -1, y: 0, z: -1}
+    localYawDegrees: 0
+    omitChance: 0
+  - piece: {fileID: 11400000, guid: 8069f447e0f43c4418be654983a378ec, type: 2}
+    localPosition: {x: 1, y: 0, z: -1}
+    localYawDegrees: 0
+    omitChance: 0
+  - piece: {fileID: 11400000, guid: 8069f447e0f43c4418be654983a378ec, type: 2}
+    localPosition: {x: -1, y: 0, z: 1}
+    localYawDegrees: 0
+    omitChance: 0
+  - piece: {fileID: 11400000, guid: 8069f447e0f43c4418be654983a378ec, type: 2}
+    localPosition: {x: 1, y: 0, z: 1}
+    localYawDegrees: 0
+    omitChance: 0
+  - piece: {fileID: 11400000, guid: b4510d9d160fb6b44808a67c6fa8a472, type: 2}
+    localPosition: {x: -1, y: 0.5, z: 2}
+    localYawDegrees: 0
+    omitChance: 0.2
+  - piece: {fileID: 11400000, guid: b4510d9d160fb6b44808a67c6fa8a472, type: 2}
+    localPosition: {x: 1, y: 0.5, z: 2}
+    localYawDegrees: 0
+    omitChance: 0.35
+  - piece: {fileID: 11400000, guid: b4510d9d160fb6b44808a67c6fa8a472, type: 2}
+    localPosition: {x: -1, y: 0.5, z: -2}
+    localYawDegrees: 0
+    omitChance: 0.35
+  - piece: {fileID: 11400000, guid: fb328c8129857804db2d070b7069da8c, type: 2}
+    localPosition: {x: 1, y: 0.5, z: -2}
+    localYawDegrees: 0
+    omitChance: 0
+  - piece: {fileID: 11400000, guid: b4510d9d160fb6b44808a67c6fa8a472, type: 2}
+    localPosition: {x: 2, y: 0.5, z: -1}
+    localYawDegrees: 90
+    omitChance: 0.2
+  - piece: {fileID: 11400000, guid: b4510d9d160fb6b44808a67c6fa8a472, type: 2}
+    localPosition: {x: 2, y: 0.5, z: 1}
+    localYawDegrees: 90
+    omitChance: 0.35
+  - piece: {fileID: 11400000, guid: b4510d9d160fb6b44808a67c6fa8a472, type: 2}
+    localPosition: {x: -2, y: 0.5, z: -1}
+    localYawDegrees: 90
+    omitChance: 0.35
+  - piece: {fileID: 11400000, guid: b4510d9d160fb6b44808a67c6fa8a472, type: 2}
+    localPosition: {x: -2, y: 0.5, z: 1}
+    localYawDegrees: 90
+    omitChance: 0.2
+  - piece: {fileID: 11400000, guid: 841f4c6f553ddbf499a25b6da99f730b, type: 2}
+    localPosition: {x: -1, y: 2.5, z: -1}
+    localYawDegrees: 0
+    omitChance: 0.3
+  - piece: {fileID: 11400000, guid: 841f4c6f553ddbf499a25b6da99f730b, type: 2}
+    localPosition: {x: 1, y: 2.5, z: -1}
+    localYawDegrees: 0
+    omitChance: 0.5
+  - piece: {fileID: 11400000, guid: 841f4c6f553ddbf499a25b6da99f730b, type: 2}
+    localPosition: {x: -1, y: 2.5, z: 1}
+    localYawDegrees: 0
+    omitChance: 0.5
+  - piece: {fileID: 11400000, guid: 841f4c6f553ddbf499a25b6da99f730b, type: 2}
+    localPosition: {x: 1, y: 2.5, z: 1}
+    localYawDegrees: 0
+    omitChance: 0.3
+  - piece: {fileID: 11400000, guid: b4510d9d160fb6b44808a67c6fa8a472, type: 2}
+    localPosition: {x: -1, y: 2.5, z: 2}
+    localYawDegrees: 0
+    omitChance: 0.55
+  - piece: {fileID: 11400000, guid: b4510d9d160fb6b44808a67c6fa8a472, type: 2}
+    localPosition: {x: 1, y: 2.5, z: 2}
+    localYawDegrees: 0
+    omitChance: 0.7
+  - piece: {fileID: 11400000, guid: b4510d9d160fb6b44808a67c6fa8a472, type: 2}
+    localPosition: {x: 2, y: 2.5, z: -1}
+    localYawDegrees: 90
+    omitChance: 0.55
+  - piece: {fileID: 11400000, guid: b4510d9d160fb6b44808a67c6fa8a472, type: 2}
+    localPosition: {x: -2, y: 2.5, z: 1}
+    localYawDegrees: 90
+    omitChance: 0.7
+  chests:
+  - chestPiece: {fileID: 11400000, guid: 3fb22f2c33e5b654e8f14b929d607599, type: 2}
+    localPosition: {x: 0.4, y: 0.5, z: 0.6}
+    localYawDegrees: 25
+    loot:
+    - item: {fileID: 11400000, guid: cc05f572b883bf04a9327f12e8acf676, type: 2}
+      countMin: 1
+      countMax: 1
+      dropChance: 0.35
+    - item: {fileID: 11400000, guid: fb10bdc9049667d48aca5b271b67f3f9, type: 2}
+      countMin: 4
+      countMax: 10
+      dropChance: 0.8
+    - item: {fileID: 11400000, guid: f9c7ab88be0bf314882b9647ee4e6679, type: 2}
+      countMin: 1
+      countMax: 2
+      dropChance: 0.7
+    - item: {fileID: 11400000, guid: 7b38f8450f6c7a44e813f3d048de1a69, type: 2}
+      countMin: 2
+      countMax: 4
+      dropChance: 0.8
+    - item: {fileID: 11400000, guid: 086636295fd3db74fba425e9bfed4c61, type: 2}
+      countMin: 1
+      countMax: 3
+      dropChance: 0.5
+  spawners:
+  - creature: {fileID: 11400000, guid: fb3bbb61526ed154ebb6af4547463d82, type: 2}
+    localOffset: {x: 0, y: 0, z: 0}
+    maxPopulation: 2
+    spawnRadius: 6
+    spawnOnlyAtNight: 0
+  surface: 0
+  footprintRadius: 5
+  maxHeightVariance: 2
+  spawnWeight: 1
+  coastSeawardExtent: 8
+  coastOriginAboveSea: 0.6

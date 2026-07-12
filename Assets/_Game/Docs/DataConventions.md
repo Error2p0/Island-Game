@@ -553,3 +553,32 @@ unused value/bit, never reorder, renumber or delete entries.**
 - Species roster: deer/goat (Passive, food loot), wolf (Neutral pack), boar
   (Hostile, night-boosted), stalker (Hostile, night-only, crafting-material
   loot).
+
+## Structures (structures phase)
+
+- **StructureTemplate** = stable ID + SO + StructureTemplateDatabase (synced).
+  Layouts are lists of EXISTING BuildingPieceDefinitions with local pos/yaw +
+  `omitChance` — the whole "ruined" effect is seeded omission of an intact
+  layout (deliberately no damage-simulation or ruined-material system).
+  Chest entries carry loot in the SHARED LootTableEntry format (creature
+  drops = chest loot = one format). Optional spawner entries configure
+  ordinary CreatureSpawners ("guarded ruins").
+- **Placement** (`StructurePlacementSystem`, on the VoxelWorld object): the
+  tree-scattering pattern lifted to scene objects — deterministic anchor
+  cells (cellSize doubles as the spacing floor), all rolls through the
+  generator's seeded hash, validated against `IslandWorldGenerator`'s
+  read-only height API (SampleHeight/SeaLevelY/BeachBandSize — the noise and
+  island shaping are untouched). Inland = flat grass (variance-bounded,
+  origin on the highest footprint sample); Coast = shore column + open water
+  at `coastSeawardExtent`, yaw chosen to POINT seaward. Cells process once
+  per session as the player approaches (placeRadius stays inside the data
+  ring); structures then persist as scene objects.
+- **Pieces are REAL placed pieces**: instantiated under PlacedPieceRegistry
+  and run through BuildingPiece.Initialize — deconstruction, weapon damage,
+  durability and (Phase 6) saving treat ruins exactly like player builds.
+- **Save/load note (Phase 6)**: persist placed pieces + chest inventories +
+  the processed-cell set, so looted ruins don't respawn on revisit.
+- Example templates: ruined_tower (guarded by nesting stalkers), ruined_dock
+  (Coast), abandoned_camp (functional campfire/workbench). Menu: Island
+  Game/Data/Create Example Structures + World/Add Structure System; both are
+  BuildEverything steps.
