@@ -100,6 +100,8 @@ namespace IslandGame.Combat
                 origin.position + origin.forward * 0.45f, origin.forward,
                 weapon.ProjectileSpeed, weapon.WeaponDamage, weapon.DamageType,
                 gameObject, transform);
+
+            ApplyWeaponWear(weapon); // one shot fired = one use
         }
 
         private readonly RaycastHit[] castBuffer = new RaycastHit[16];
@@ -140,6 +142,22 @@ namespace IslandGame.Combat
             var info = new DamageInfo(
                 weapon.WeaponDamage, weapon.DamageType, hit.point, origin.forward, gameObject);
             damageable.ApplyDamage(in info);
+
+            ApplyWeaponWear(weapon); // only hits that CONNECT wear the edge — air swings are free
+        }
+
+        /// <summary>
+        /// Durability phase: successful weapon uses cost the equipped weapon
+        /// its authored wear; the inventory handles the zero-durability break
+        /// (destroy or Broken Variant swap), which changes the equipped item
+        /// and thereby the damage the next swing does — no broken flag here.
+        /// </summary>
+        private void ApplyWeaponWear(ItemDefinition weapon)
+        {
+            if (weapon == null || !weapon.HasDurability || inventory == null || selector == null)
+                return;
+
+            inventory.ApplyDurabilityDamage(selector.SelectedIndex, weapon.DurabilityPerAttackHit);
         }
     }
 }

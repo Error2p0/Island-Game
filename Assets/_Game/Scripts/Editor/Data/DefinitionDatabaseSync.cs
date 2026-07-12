@@ -5,7 +5,9 @@ using IslandGame.Data;
 using IslandGame.Data.Blocks;
 using IslandGame.Data.Building;
 using IslandGame.Data.Crafting;
+using IslandGame.Data.Creatures;
 using IslandGame.Data.Items;
+using IslandGame.Data.Stats;
 using IslandGame.Data.World;
 using UnityEditor;
 using UnityEngine;
@@ -33,6 +35,8 @@ namespace IslandGame.EditorTools.Data
             SyncDatabase<RecipeDefinition, RecipeDatabase>("RecipeDatabase");
             SyncDatabase<BuildingPieceDefinition, BuildingPieceDatabase>("BuildingPieceDatabase");
             SyncDatabase<TreeTemplateDefinition, TreeTemplateDatabase>("TreeTemplateDatabase");
+            SyncDatabase<StatDefinition, StatDatabase>("StatDatabase");
+            SyncDatabase<CreatureDefinition, CreatureDatabase>("CreatureDatabase");
             AssetDatabase.SaveAssets();
         }
 
@@ -151,7 +155,8 @@ namespace IslandGame.EditorTools.Data
             Type type = AssetDatabase.GetMainAssetTypeAtPath(path);
             return type == typeof(ItemDefinition) || type == typeof(BlockDefinition)
                 || type == typeof(RecipeDefinition) || type == typeof(BuildingPieceDefinition)
-                || type == typeof(TreeTemplateDefinition);
+                || type == typeof(TreeTemplateDefinition) || type == typeof(StatDefinition)
+                || type == typeof(CreatureDefinition);
         }
     }
 }

@@ -1,0 +1,56 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10e252f82aa5d0543a6947bb05353ddf, type: 3}
+  m_Name: Stalker
+  m_EditorClassIdentifier: 
+  id: stalker
+  displayName: Night Stalker
+  description: Something the dark grows. Fast, sharp-sensed and only ever seen after
+    sundown.
+  aggression: 2
+  stats:
+  - stat: {fileID: 11400000, guid: 506f3c62f93347e4e8f522273928a5bf, type: 2}
+    baseValue: 45
+  - stat: {fileID: 11400000, guid: 2796293d7b8e4fa4882f7928bbdcba64, type: 2}
+    baseValue: 5.8
+  - stat: {fileID: 11400000, guid: 7d82d3b3b33010743a6cba7c01e4bced, type: 2}
+    baseValue: 18
+  - stat: {fileID: 11400000, guid: 061962af1d225d0449923ccda440490d, type: 2}
+    baseValue: 12
+  prefab: {fileID: 175060525503366917, guid: e895294647d8d484c806528218b46060, type: 3}
+  loot:
+  - item: {fileID: 11400000, guid: 7ce52fdfa8d06cb4c952443873ff8040, type: 2}
+    countMin: 1
+    countMax: 2
+    dropChance: 1
+  - item: {fileID: 11400000, guid: 086636295fd3db74fba425e9bfed4c61, type: 2}
+    countMin: 1
+    countMax: 3
+    dropChance: 0.8
+  - item: {fileID: 11400000, guid: f5db47a20001b4841a8a845d761fd713, type: 2}
+    countMin: 1
+    countMax: 1
+    dropChance: 0.3
+  wanderRadius: 12
+  fleeTriggerDistance: 6
+  fleeSafeDistance: 25
+  alertSeconds: 0.8
+  loseInterestSeconds: 4
+  approachDistance: 1.6
+  requireLineOfSight: 1
+  attackWindupSeconds: 0.35
+  attackCooldownSeconds: 1.4
+  attackDamageType: 1
+  aggroDurationSeconds: 30
+  packAlertRadius: 14
+  eyeHeight: 0.6
+  deathDespawnSeconds: 2.5

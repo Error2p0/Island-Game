@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using IslandGame.Data.Items;
+using IslandGame.Data.Stats;
 using IslandGame.Player;
+using IslandGame.Stats;
 using UnityEngine;
 
 namespace IslandGame.Inventory
@@ -29,7 +31,7 @@ namespace IslandGame.Inventory
         [SerializeField] private int backpackSize = 27;
 
         [Header("Carry Weight")]
-        [Tooltip("Total kilograms that count as a full load (CarryWeight01 = 1). The movement system's speed/sprint/prone penalties are tuned there, not here.")]
+        [Tooltip("Fallback only: total kilograms that count as a full load (CarryWeight01 = 1) when the player has no StatContainer with a 'carry_capacity' stat. Stat-backed capacity is authored on the CarryCapacity StatDefinition and buffed via modifiers. The movement system's speed/sprint/prone penalties are tuned there, not here.")]
         [Min(1f)]
         [SerializeField] private float maxCarryWeightKg = 60f;
 
@@ -52,9 +54,13 @@ namespace IslandGame.Inventory
 
         private InventorySlot[] slots;
         private PlayerReferences references;
+        private StatContainer statContainer;
 
         /// <summary>Raised after any inventory mutation (single event; the small grid redraws whole).</summary>
         public event Action InventoryChanged;
+
+        /// <summary>Raised when a unit breaks from durability loss, with the item that broke — HUD toasts/SFX later.</summary>
+        public event Action<ItemDefinition> ItemBroke;
 
         public int SlotCount
         {
@@ -70,12 +76,40 @@ namespace IslandGame.Inventory
         /// <summary>Sum of all slot weights, kilograms. Updated on every change.</summary>
         public float TotalWeightKg { get; private set; }
 
-        public float MaxCarryWeightKg => maxCarryWeightKg;
+        /// <summary>
+        /// Kilograms that count as a full load. Backed by the carry_capacity
+        /// stat when the entity has one (buffable via modifiers from the stats
+        /// phase on); the serialized field remains the fallback.
+        /// </summary>
+        public float MaxCarryWeightKg =>
+            statContainer != null && statContainer.Has(StatIds.CarryCapacity)
+                ? Mathf.Max(1f, statContainer.GetValue(StatIds.CarryCapacity, maxCarryWeightKg))
+                : maxCarryWeightKg;
 
         private void Awake()
         {
             references = GetComponent<PlayerReferences>();
+            statContainer = GetComponent<StatContainer>();
             EnsureSlots();
+        }
+
+        private void OnEnable()
+        {
+            if (statContainer != null)
+                statContainer.OnStatChanged += OnStatChanged;
+        }
+
+        private void OnDisable()
+        {
+            if (statContainer != null)
+                statContainer.OnStatChanged -= OnStatChanged;
+        }
+
+        /// <summary>A carry-capacity buff/debuff changes the normalized load without any item moving — re-push it.</summary>
+        private void OnStatChanged(string statId, float oldValue, float newValue)
+        {
+            if (statId == StatIds.CarryCapacity)
+                NotifyChanged();
         }
 
         /// <summary>
@@ -123,13 +157,26 @@ namespace IslandGame.Inventory
         // ------------------------------------------------------------------
 
         /// <summary>
-        /// Adds up to count units, merging into existing stacks first, then
-        /// filling empty slots (hotbar first). Returns how many units were
-        /// actually stored — callers keep the remainder in the world.
+        /// Adds up to count units at full condition, merging into existing
+        /// stacks first, then filling empty slots (hotbar first). Returns how
+        /// many units were actually stored — callers keep the remainder in the
+        /// world.
         /// </summary>
         public int AddItem(ItemDefinition item, int count)
         {
-            int added = AddItemInternal(item, count);
+            return AddItem(item, count, 1f);
+        }
+
+        /// <summary>
+        /// Durability-preserving add (picking a dropped tool back up). The
+        /// durability applies to units landing in EMPTY slots; units merged
+        /// into existing stacks keep the stack's durability — in practice
+        /// durability-bearing items are unstackable (MaxStackSize 1), so a
+        /// worn tool always occupies its own slot with its own condition.
+        /// </summary>
+        public int AddItem(ItemDefinition item, int count, float durability01)
+        {
+            int added = AddItemInternal(item, count, durability01);
             if (added > 0)
                 NotifyChanged();
             return added;
@@ -311,10 +358,106 @@ namespace IslandGame.Inventory
         }
 
         // ------------------------------------------------------------------
+        // Durability (the reserved per-slot field, live since this phase)
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Applies wear to the slot's item, in the item's own durability
+        /// POINTS (converted to the slot's 0-1 field via MaxDurability).
+        /// Reaching zero triggers the item's authored break behavior
+        /// immediately — a broken unit never lingers at 0 in the inventory.
+        /// No-op for items without durability.
+        /// </summary>
+        public void ApplyDurabilityDamage(int slotIndex, float durabilityPoints)
+        {
+            if (!IsValidIndex(slotIndex) || durabilityPoints <= 0f)
+                return;
+
+            InventorySlot slot = slots[slotIndex];
+            if (slot.IsEmpty || !slot.Item.HasDurability)
+                return;
+
+            float newDurability01 = slot.Durability01 - durabilityPoints / slot.Item.MaxDurability;
+            if (newDurability01 > 0f)
+            {
+                slot.SetDurability01(newDurability01);
+            }
+            else
+            {
+                HandleBreak(slot);
+            }
+
+            NotifyChanged();
+        }
+
+        /// <summary>Sets a slot's condition directly (workbench repair now, save/load in the persistence phase).</summary>
+        public void SetSlotDurability01(int slotIndex, float durability01)
+        {
+            if (!IsValidIndex(slotIndex))
+                return;
+
+            InventorySlot slot = slots[slotIndex];
+            if (slot.IsEmpty || Mathf.Approximately(slot.Durability01, durability01))
+                return;
+
+            slot.SetDurability01(durability01);
+            NotifyChanged();
+        }
+
+        /// <summary>
+        /// Zero-durability outcome, both authored behaviors fully handled:
+        /// Destroy removes the unit; Downgrade swaps it for the Broken Variant
+        /// at that variant's full condition. Stacks of durability items are a
+        /// degenerate case (they're MaxStackSize 1 by convention) but handled:
+        /// one unit breaks, the rest of the stack is fresh.
+        /// </summary>
+        private void HandleBreak(InventorySlot slot)
+        {
+            ItemDefinition item = slot.Item;
+
+            bool downgrade = item.BreakBehavior == ItemBreakBehavior.DowngradeToBrokenVariant;
+            if (downgrade && item.BrokenVariant == null)
+            {
+                Debug.LogWarning(
+                    $"[InventorySystem] '{item.DisplayName}' is set to downgrade on break but has no Broken Variant " +
+                    "authored — destroying it instead. Fix the item in the Item Editor.", this);
+                downgrade = false;
+            }
+
+            if (slot.Count <= 1)
+            {
+                if (downgrade)
+                    slot.Set(item.BrokenVariant, 1, 1f);
+                else
+                    slot.Clear();
+            }
+            else
+            {
+                slot.AddCount(-1);
+                slot.SetDurability01(1f); // the next unit of the stack is fresh
+
+                if (downgrade)
+                {
+                    int stored = AddItemInternal(item.BrokenVariant, 1);
+                    if (stored == 0)
+                    {
+                        WorldItem.Spawn(item.BrokenVariant, 1, 1f,
+                            transform.position + Vector3.up * 1.2f, Vector3.up);
+                    }
+                }
+            }
+
+            Debug.Log(downgrade
+                ? $"[InventorySystem] {item.DisplayName} broke → {item.BrokenVariant.DisplayName}."
+                : $"[InventorySystem] {item.DisplayName} broke and was destroyed.");
+            ItemBroke?.Invoke(item);
+        }
+
+        // ------------------------------------------------------------------
         // Internals
         // ------------------------------------------------------------------
 
-        private int AddItemInternal(ItemDefinition item, int count)
+        private int AddItemInternal(ItemDefinition item, int count, float durability01 = 1f)
         {
             if (item == null || count <= 0)
                 return 0;
@@ -340,7 +483,7 @@ namespace IslandGame.Inventory
                     continue;
 
                 int moved = Mathf.Min(item.MaxStackSize, remaining);
-                slot.Set(item, moved, 1f);
+                slot.Set(item, moved, durability01);
                 remaining -= moved;
             }
 
@@ -379,7 +522,7 @@ namespace IslandGame.Inventory
                 TotalWeightKg += slots[i].TotalWeightKg;
 
             if (references != null && references.Locomotion != null)
-                references.Locomotion.SetCarryWeight(CarryLoad.ToNormalized(TotalWeightKg, maxCarryWeightKg));
+                references.Locomotion.SetCarryWeight(CarryLoad.ToNormalized(TotalWeightKg, MaxCarryWeightKg));
 
             InventoryChanged?.Invoke();
         }

@@ -53,7 +53,11 @@ namespace IslandGame.EditorTools.Data
                 EditorGUILayout.Space(6f);
                 DrawToolSection(serialized, allBlocks, blockDatabaseAvailable);
                 EditorGUILayout.Space(6f);
+                DrawDurabilitySection(session, serialized);
+                EditorGUILayout.Space(6f);
                 DrawHoldSection(session, serialized);
+                EditorGUILayout.Space(6f);
+                DrawEquipStatModifiersSection(serialized);
                 EditorGUILayout.Space(6f);
                 DrawValidationSection(session, serialized);
                 EditorGUILayout.Space(8f);
@@ -104,7 +108,10 @@ namespace IslandGame.EditorTools.Data
 
             var category = (ItemCategory)serialized.FindProperty("category").intValue;
             if (category == ItemCategory.Consumable)
+            {
                 EditorGUILayout.PropertyField(serialized.FindProperty("hungerRestore"));
+                EditorGUILayout.PropertyField(serialized.FindProperty("thirstRestore"));
+            }
 
             if (category == ItemCategory.Block || category == ItemCategory.Placeable)
             {
@@ -227,6 +234,68 @@ namespace IslandGame.EditorTools.Data
         }
 
         // ------------------------------------------------------------------
+        // Durability (tools & weapons)
+        // ------------------------------------------------------------------
+
+        private static void DrawDurabilitySection(ItemEditSession session, SerializedObject serialized)
+        {
+            bool isWeapon = serialized.FindProperty("isWeapon").boolValue;
+            bool isTool = serialized.FindProperty("isTool").boolValue;
+            if (!isWeapon && !isTool)
+                return; // durability applies to tools/weapons only — keep other items' inspectors clean
+
+            EditorGUILayout.LabelField("Durability", EditorStyles.boldLabel);
+
+            SerializedProperty maxDurability = serialized.FindProperty("maxDurability");
+            EditorGUILayout.PropertyField(maxDurability);
+
+            if (maxDurability.floatValue <= 0f)
+            {
+                EditorGUILayout.HelpBox("0 = never degrades. Set Max Durability to enable wear.", MessageType.None);
+                return;
+            }
+
+            using (new EditorGUI.IndentLevelScope())
+            {
+                if (isTool)
+                    EditorGUILayout.PropertyField(serialized.FindProperty("durabilityPerMiningHit"));
+                if (isWeapon)
+                    EditorGUILayout.PropertyField(serialized.FindProperty("durabilityPerAttackHit"));
+
+                SerializedProperty breakBehavior = serialized.FindProperty("breakBehavior");
+                EditorGUILayout.PropertyField(breakBehavior);
+
+                if ((ItemBreakBehavior)breakBehavior.intValue == ItemBreakBehavior.DowngradeToBrokenVariant)
+                {
+                    SerializedProperty brokenVariant = serialized.FindProperty("brokenVariant");
+                    EditorGUILayout.PropertyField(brokenVariant);
+
+                    var variant = brokenVariant.objectReferenceValue as ItemDefinition;
+                    if (variant == null)
+                    {
+                        EditorGUILayout.HelpBox(
+                            "No Broken Variant assigned — the item will be DESTROYED on break until one is set. " +
+                            "Author the variant as a normal, weaker item (lower damage/mining stats, no equip modifiers).",
+                            MessageType.Warning);
+                    }
+                    else if (variant == session.Target)
+                    {
+                        EditorGUILayout.HelpBox(
+                            "The Broken Variant is the item itself — breaking would refresh it forever. Pick a different item.",
+                            MessageType.Error);
+                    }
+                    else if (variant.BreakBehavior == ItemBreakBehavior.DowngradeToBrokenVariant
+                             && variant.BrokenVariant == session.Target)
+                    {
+                        EditorGUILayout.HelpBox(
+                            "This item and its Broken Variant downgrade into each other — an infinite loop. Break the cycle.",
+                            MessageType.Error);
+                    }
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------
         // Holding
         // ------------------------------------------------------------------
 
@@ -254,6 +323,24 @@ namespace IslandGame.EditorTools.Data
                     "Toggle 'Hold Offset' above the preview to see the model under the socket axes (X red, Y green, Z blue).",
                     MessageType.None);
             }
+        }
+
+        // ------------------------------------------------------------------
+        // Equip stat modifiers
+        // ------------------------------------------------------------------
+
+        private static void DrawEquipStatModifiersSection(SerializedObject serialized)
+        {
+            EditorGUILayout.LabelField("Stat Modifiers (While Equipped)", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(
+                serialized.FindProperty("equipStatModifiers"),
+                new GUIContent("Equip Stat Modifiers"),
+                true);
+            EditorGUILayout.HelpBox(
+                "Active only while this is the equipped hotbar item. Typical use: mining_speed on better " +
+                "tools (Flat +0.5 on top of the base 1.0, or PercentMultiplier 0.5 = +50%), carry_capacity " +
+                "on future backpacks. Stat IDs come from the Stat Definitions (see the StatDatabase).",
+                MessageType.None);
         }
 
         // ------------------------------------------------------------------

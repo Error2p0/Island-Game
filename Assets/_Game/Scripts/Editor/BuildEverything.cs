@@ -40,7 +40,7 @@ namespace IslandGame.EditorTools
                     "This runs every builder in dependency order.\n\n" +
                     "DELETED and rebuilt from scratch:\n" +
                     "  • Player (and all component tweaks on it)\n" +
-                    "  • InventoryCanvas / CreativeMenuCanvas / CraftingMenuCanvas\n" +
+                    "  • InventoryCanvas / CreativeMenuCanvas / CraftingMenuCanvas / StatsHudCanvas\n" +
                     "  • VoxelWorld\n" +
                     "  • Generated animations folder\n\n" +
                     "KEPT: all content assets (items, blocks, recipes, textures) — " +
@@ -61,6 +61,8 @@ namespace IslandGame.EditorTools
                 ("Create example recipes (+ Stone Pickaxe)", ExampleRecipeCreator.Create),
                 ("Create example building pieces", ExampleBuildingPieceCreator.Create),
                 ("Generate base content set", BaseContentSetGenerator.Run),
+                ("Create player stat definitions", StatContentCreator.Create),
+                ("Create example creatures", CreatureContentCreator.Create),
                 ("Build player rig", PlayerRigBuilder.BuildPlayerRig),
                 ("Build player animations & controller", PlayerAnimationBuilder.Build),
                 ("Create hold sockets", HoldSocketBuilder.Create),
@@ -68,8 +70,11 @@ namespace IslandGame.EditorTools
                 ("Build creative menu UI", CreativeMenuUIBuilder.Build),
                 ("Create voxel world", VoxelWorldBuilder.Create),
                 ("Add building system to player", BuildingSystemBuilder.Create),
+                ("Add stats system to player", StatsSystemBuilder.Create),
                 ("Create day/night cycle", DayNightBuilder.Create),
                 ("Build crafting menu UI", CraftingMenuUIBuilder.Build),
+                ("Build stats HUD", StatsHudBuilder.Build),
+                ("Create example creature spawners", CreatureContentCreator.CreateExampleSpawners),
                 ("Place player at spawn", PlacePlayerAtSpawn),
             };
 
@@ -127,6 +132,8 @@ namespace IslandGame.EditorTools
             DeleteByName("InventoryCanvas");
             DeleteByName("CreativeMenuCanvas");
             DeleteByName("CraftingMenuCanvas");
+            DeleteByName("StatsHudCanvas");
+            DeleteByName("CreatureSpawners");
 
             var world = UnityEngine.Object.FindFirstObjectByType<VoxelWorld>();
             if (world != null)

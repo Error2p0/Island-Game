@@ -1,8 +1,10 @@
 using System.Collections.Generic;
 using IslandGame.Data.Blocks;
 using IslandGame.Data.Items;
+using IslandGame.Data.Stats;
 using IslandGame.Inventory;
 using IslandGame.Player;
+using IslandGame.Stats;
 using UnityEngine;
 
 namespace IslandGame.Terrain
@@ -59,6 +61,7 @@ namespace IslandGame.Terrain
         private PlayerReferences references;
         private InventorySystem inventory;
         private HotbarSelector selector;
+        private StatContainer statContainer;
         private MiningDebrisEffect debris;
 
         private readonly List<VoxelWorld.CarvedBlock> carvedBuffer = new List<VoxelWorld.CarvedBlock>(8);
@@ -98,6 +101,7 @@ namespace IslandGame.Terrain
             references = GetComponent<PlayerReferences>();
             inventory = GetComponent<InventorySystem>();
             selector = GetComponent<HotbarSelector>();
+            statContainer = GetComponent<StatContainer>();
         }
 
         private void Start()
@@ -191,6 +195,13 @@ namespace IslandGame.Terrain
             ItemDefinition equipped = selector != null ? selector.EquippedItem : null;
             bool usingTool = equipped != null && equipped.IsTool;
             float speed = usingTool && equipped.IsEfficientAgainst(block) ? equipped.MiningSpeedMultiplier : 1f;
+
+            // Stats phase: the mining_speed stat multiplies ON TOP of the
+            // tool's authored efficiency, so equip modifiers and future buffs
+            // (food, potions) genuinely mine faster. 1 when the stat is absent.
+            if (statContainer != null)
+                speed *= Mathf.Max(0f, statContainer.GetValue(StatIds.MiningSpeed, 1f));
+
             miningProgressSeconds += speed * deltaTime;
             MiningProgress01 = block.Hardness <= 0f ? 1f : Mathf.Clamp01(miningProgressSeconds / block.Hardness);
 
@@ -220,6 +231,7 @@ namespace IslandGame.Terrain
                 {
                     GrantDrops(cell, block);
                     debris?.EmitBurst(cell + new Vector3(0.5f, 0.5f, 0.5f), block, 10);
+                    ApplyToolWear(equipped);
                 }
 
                 return;
@@ -239,6 +251,25 @@ namespace IslandGame.Terrain
 
             if (cleared > 0)
                 debris?.EmitBurst(AimedHitPoint, block, 12);
+
+            // Every completed radius bite wears the tool — it struck rock even
+            // when the sphere's fully-cleared-cell payout happens to be zero.
+            ApplyToolWear(equipped);
+        }
+
+        /// <summary>
+        /// Durability phase: one completed mining hit costs the equipped
+        /// tool its authored wear. At zero the inventory applies the break
+        /// behavior; the equipped item changes (gone or Broken Variant), so
+        /// next frame's aim/tier checks naturally re-gate mining — no special
+        /// "is broken" state exists anywhere.
+        /// </summary>
+        private void ApplyToolWear(ItemDefinition equipped)
+        {
+            if (equipped == null || !equipped.HasDurability || inventory == null || selector == null)
+                return;
+
+            inventory.ApplyDurabilityDamage(selector.SelectedIndex, equipped.DurabilityPerMiningHit);
         }
 
         /// <summary>Per-cell carve permission: same tier/unbreakable policy as aiming, plus liquids and non-solids stay untouched by tools.</summary>

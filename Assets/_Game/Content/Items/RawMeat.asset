@@ -1,0 +1,51 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0a47ca404a6e13b4f98f1e2f92b894c2, type: 3}
+  m_Name: RawMeat
+  m_EditorClassIdentifier: 
+  id: raw_meat
+  displayName: Raw Meat
+  description: Fresh game. Edible raw in a pinch; the campfire makes it worth eating.
+  icon: {fileID: 21300000, guid: 14835174b52534e4abf29ba340f8eae3, type: 3}
+  category: 3
+  maxStackSize: 10
+  weightKg: 0.5
+  worldModelPrefab: {fileID: 0}
+  isWeapon: 0
+  weaponDamage: 0
+  damageType: 0
+  attacksPerSecond: 1
+  attackRange: 2
+  attackClip: {fileID: 0}
+  isRangedWeapon: 0
+  projectileSpeed: 30
+  ammoItem: {fileID: 0}
+  isTool: 0
+  toolType: 0
+  toolTier: 0
+  miningSpeedMultiplier: 1
+  miningRadius: 0
+  efficientBlocks: []
+  maxDurability: 0
+  durabilityPerMiningHit: 1
+  durabilityPerAttackHit: 1
+  breakBehavior: 0
+  brokenVariant: {fileID: 0}
+  holdType: 0
+  holdSocket: 0
+  holdLocalPosition: {x: 0, y: 0, z: 0}
+  holdLocalRotationEuler: {x: 0, y: 0, z: 0}
+  placedBlock: {fileID: 0}
+  hungerRestore: 12
+  thirstRestore: 2
+  equipStatModifiers: []
+  placedPiece: {fileID: 0}

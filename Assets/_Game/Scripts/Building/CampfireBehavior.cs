@@ -55,6 +55,14 @@ namespace IslandGame.Building
 
         [SerializeField] private float flickerSpeed = 6f;
 
+        // Live-instance registry for proximity consumers (warmth, future
+        // cooking/visibility): a scan over this short list beats physics
+        // queries and scene searches, and enables/disables keep it exact.
+        private static readonly List<CampfireBehavior> activeCampfires = new List<CampfireBehavior>();
+
+        /// <summary>Every enabled campfire in the world (lit or not — check IsLit). Warmth systems scan this.</summary>
+        public static IReadOnlyList<CampfireBehavior> ActiveCampfires => activeCampfires;
+
         private BuildingPiece piece;
         private float fuelSeconds;
         private bool isLit;
@@ -73,6 +81,16 @@ namespace IslandGame.Building
 
         public string InteractionPrompt =>
             isLit ? "Add fuel / extinguish" : fuelSeconds > 0f ? "Light campfire" : "Add fuel (hold wood)";
+
+        private void OnEnable()
+        {
+            activeCampfires.Add(this);
+        }
+
+        private void OnDisable()
+        {
+            activeCampfires.Remove(this);
+        }
 
         public void Init(BuildingPiece owner)
         {

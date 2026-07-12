@@ -424,3 +424,132 @@ unused value/bit, never reorder, renumber or delete entries.**
 
 - Block → item: `BlockDefinition.DropItem` + `DropCountMin/Max` (what mining yields).
 - Item → block: `ItemDefinition.PlacedBlock` (what a Block/Placeable item places).
+
+## Stats (stats/attributes phase)
+
+- **StatDefinition** follows the standard stable-ID + ScriptableObject +
+  Database pattern (`StatDatabase`, synced like every other database). Assets
+  live in `Assets/_Game/Content/Stats`; the code-facing IDs are centralized in
+  `StatIds` (health, stamina, hunger, thirst, warmth, mining_speed,
+  carry_capacity) — never scatter stat ID strings.
+- **StatKind**: `Resource` = spendable pool (modifiers move the MAXIMUM;
+  current depletes/regens). `Attribute` = derived number (current always
+  equals the modified value).
+- **Decay is negative regen** — hunger drain and stamina recovery are the one
+  `regenPerSecond` field with opposite signs. Decay ignores `regenDelaySeconds`
+  (the delay only gates positive regen after a decrease).
+- **Modifier math**: `(base + Σflat) * (1 + Σpercent)`, clamped to
+  [minValue, maxValue]. Modifiers target `Value` or `RegenRate`; sources are
+  compared by reference for `RemoveAllFromSource`.
+- **One container, any entity**: `StatContainer` is generic — the player lists
+  all seven stats; creatures (AI phase) declare only what they need (usually
+  just health) on the same component. Combat code talks to `StatContainer` /
+  `IDamageable`, never to a species-specific health field.
+- **Adapted hooks** (never parallel systems): PlayerLocomotion's stamina float
+  → stat-backed when a container is present (serialized regen fields are
+  fallback-only); PlayerStats' hunger → stat-backed + thirst
+  (`ItemDefinition.ThirstRestore`); IDamageable on the player → `PlayerHealth`;
+  inventory `maxCarryWeightKg` → carry_capacity stat; mining speed multiplies
+  by the mining_speed stat.
+- **Equip buffs**: `ItemDefinition.EquipStatModifiers` (stat ID + target +
+  type + value), applied while the item is the equipped hotbar item by
+  `EquippedItemStatModifiers`.
+- **Cross-stat survival rules** (well-fed regen, starving penalties,
+  night/campfire warmth, freezing damage) live ONLY in `PlayerSurvival`, each
+  expressed as a stat modifier toggled on state edges.
+
+## Durability (durability phase)
+
+- **Single home**: an item's condition lives in `InventorySlot.durability01`
+  (0–1, the field reserved since the inventory phase) and in
+  `WorldItem.Durability01` while dropped. There is no other durability state —
+  save/load serializes exactly these two.
+- **Authoring**: `ItemDefinition` — `MaxDurability` (points; 0 = never
+  degrades), `DurabilityPerMiningHit` / `DurabilityPerAttackHit`,
+  `BreakBehavior` (Destroy | DowngradeToBrokenVariant) + `BrokenVariant`.
+  `HasDurability` requires Tool/Weapon flag AND MaxDurability > 0. Broken
+  variants are ordinary weaker items — no special-case runtime code.
+- **Wear points, not fractions**: systems call
+  `InventorySystem.ApplyDurabilityDamage(slotIndex, points)`; conversion to
+  0–1 happens once, inside. Wear fires only on COMPLETED mining bites and
+  weapon uses that connect (or arrows fired) — air swings are free.
+- **Break at zero is immediate** (never a lingering 0-durability item):
+  Destroy clears the unit, Downgrade swaps in the Broken Variant at full
+  condition. `InventorySystem.ItemBroke` event for future toasts/SFX.
+- **Repair**: `ItemRepair.TryRepairSlot` — cost = the item's own crafting
+  recipe ingredients × workbench `repairCostFraction` × missing durability
+  (min 1 each), full restore; validate-all-before-consume like crafting.
+  Deliberately NO separate repair-recipe asset type. Items without a recipe
+  (broken variants) are not repairable — re-craft them.
+- **UI**: slot durability strip (hidden at full condition, red warning under
+  25%) is part of the InventoryUIBuilder slot template — old canvases need a
+  rebuild; `InventorySlotView` null-guards the bar for pre-phase canvases.
+
+## Creatures (creatures phase)
+
+- **CreatureDefinition** = stable ID + SO + CreatureDatabase (auto-synced).
+  Species stats are `CreatureStatEntry` lists: a SHARED StatDefinition
+  reference + per-species base value (0 = definition default) — never
+  per-species stat assets. Loot tables (`LootTableEntry`: item, count range,
+  drop chance) are authored now, ROLLED by the combat phase's death handling.
+- **A creature is just another StatContainer owner**: `Creature.Init` calls
+  `StatContainer.ConfigureStats(definitions, baseOverrides)` — which is also
+  the full reset used on pooled reuse. Damage arrives via the existing
+  IDamageable seam and lands on the health stat; `Creature.OnDeath` fires on
+  the container's OnStatDepleted edge (combat phase subscribes for loot).
+- **Pathing is voxel-sampled steering, NOT NavMesh**: `VoxelNavigation`
+  (column sampling for ground/step/water) + `CreatureMover` (probe-and-slide
+  headings, 1-block steps, gravity). Rationale documented on VoxelNavigation:
+  chunk collision meshes (NavMesh's only source) exist only in the pooled
+  render ring, mining edits land ~every second with no incremental NavMesh
+  update, and voxel data needs zero rebake. Upgrade path if ever needed:
+  A* over the same voxel data feeding the same mover.
+- **AI**: CreatureAI states Idle/Wander/Alert/Flee/Chase; aggression table on
+  the definition (Passive flees, Neutral reacts only to damage, Hostile
+  chases). Detection = distance + optional LOS ray on a staggered 0.2 s tick.
+  The combat phase adds attacking FROM Chase's approach-distance hold.
+- **Spawning**: CreatureSpawner (definition, radius, max population, spawn
+  interval) pools instances — bounded GameObject count; dormant beyond
+  activation distance; despawns beyond despawn distance (keep that inside the
+  voxel data ring). Structures/world-gen phases call SetDefinition + the same
+  spawner.
+- **Player stat set is explicit** (StatsSystemBuilder.PlayerStatIds) — the
+  StatDatabase also holds creature stats (move_speed, attack_damage,
+  detection_radius) that must not land on the player.
+- Creature prefabs/animation: primitive-built generic rigs (bones + collider-
+  less visuals, root capsule collider + kinematic rigidbody), editor-generated
+  Idle/Walk clips (transform curves) in a Speed01 Simple1D blend.
+
+## Creature combat (combat phase)
+
+- **Symmetric damage**: creature attacks hit the player through the SAME
+  IDamageable seam player weapons use (`PlayerHealth` on the player root);
+  amount = the creature's `attack_damage` stat, type = the definition's
+  `attackDamageType`. Attack timing is data (`attackWindupSeconds` = the hit
+  window inside the animation, `attackCooldownSeconds` = full cycle); a
+  player who backs out of range during the windup is missed.
+- **Attack loop**: Chase → Attack at ApproachDistance → windup/hit/recover →
+  sidestep reposition → Chase. The Attack animator state is triggered by the
+  "Attack" trigger (AnyState → Attack → default on exit time); the content
+  creator retrofits it onto pre-combat controllers idempotently.
+- **Aggro**: an attacked Neutral counts as Hostile (`EffectiveAggression`)
+  for `aggroDurationSeconds`, refreshed per hit, cleared only by successful
+  escape (chase give-up) or death. Pack alerts: damage broadcasts to
+  same-species creatures within `packAlertRadius` via the static CreatureAI
+  registry (one broadcast, never chained) — hostiles/neutrals join, passives
+  scatter.
+- **Death**: Creature.OnDeath → loot table rolls into `WorldItem.Spawn`
+  (the mining drop mechanism — never a second one), animator disables, the
+  body tips over (scripted pose, primitive rigs have no ragdoll), despawns to
+  the pool after `deathDespawnSeconds`.
+- **Day/night**: CreatureSpawner subscribes OnNightStart/OnDayStart (events,
+  not polling; debug SetTimeOfDay jumps fire no events by design). Night =
+  `nightPopulationBonus` extra cap + `nightSpawnIntervalMultiplier` faster
+  spawns + `nightDetectionRadiusBonus` as a stat MODIFIER sourced to the
+  spawner (dawn strips via RemoveAllFromSource). `spawnOnlyAtNight` spawners
+  sleep by day and despawn their brood at first light.
+- Weapon durability wears ONLY on confirmed hits (melee connect / arrow
+  fired) — verified as already implemented by the durability phase.
+- Species roster: deer/goat (Passive, food loot), wolf (Neutral pack), boar
+  (Hostile, night-boosted), stalker (Hostile, night-only, crafting-material
+  loot).

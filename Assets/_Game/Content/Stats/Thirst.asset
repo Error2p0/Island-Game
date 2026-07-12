@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 56a37834d6af9974ebcebdae72eaf013, type: 3}
+  m_Name: Thirst
+  m_EditorClassIdentifier: 
+  id: thirst
+  displayName: Thirst
+  description: Drains a little faster than hunger; restored by drinks and juicy food.
+    Same bonuses/penalties as hunger.
+  category: 1
+  kind: 0
+  baseValue: 100
+  minValue: 0
+  maxValue: 100
+  regenPerSecond: -0.058333334
+  regenDelaySeconds: 0
+  showOnHud: 1
+  barColor: {r: 0.25, g: 0.55, b: 0.85, a: 1}

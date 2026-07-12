@@ -38,10 +38,14 @@ namespace IslandGame.Inventory.UI
             nameText.text = string.IsNullOrEmpty(item.DisplayName) ? item.name : item.DisplayName;
 
             string description = string.IsNullOrEmpty(item.Description) ? string.Empty : item.Description + "\n";
+            string durability = item.HasDurability
+                ? $"\nDurability: {Mathf.CeilToInt(slot.Durability01 * item.MaxDurability)}/{item.MaxDurability:0}"
+                : string.Empty;
             bodyText.text =
                 $"{description}" +
                 $"Weight: {item.WeightKg:0.##} kg each ({slot.TotalWeightKg:0.##} kg total)\n" +
-                $"Stack: {slot.Count}/{item.MaxStackSize}";
+                $"Stack: {slot.Count}/{item.MaxStackSize}" +
+                durability;
 
             gameObject.SetActive(true);
             FollowPointer();

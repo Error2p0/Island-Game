@@ -36,7 +36,8 @@ namespace IslandGame.Inventory
             if (inventory == null || Item == null || Count <= 0)
                 return 0;
 
-            int added = inventory.AddItem(Item, Count);
+            // Durability rides along: a dropped worn pickaxe comes back worn.
+            int added = inventory.AddItem(Item, Count, Durability01);
             if (added <= 0)
                 return 0;
 

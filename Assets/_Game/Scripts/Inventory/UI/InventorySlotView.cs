@@ -21,6 +21,18 @@ namespace IslandGame.Inventory.UI
         [SerializeField] private Text countText;
         [SerializeField] private Image selectionHighlight;
 
+        [Tooltip("Durability strip root (background). Null-safe: canvases built before the durability phase simply show no bar until rebuilt.")]
+        [SerializeField] private GameObject durabilityRoot;
+
+        [SerializeField] private Image durabilityFill;
+
+        private static readonly Color DurabilityFull = new Color(0.35f, 0.78f, 0.25f);
+        private static readonly Color DurabilityMid = new Color(0.92f, 0.80f, 0.20f);
+        private static readonly Color DurabilityLow = new Color(0.90f, 0.18f, 0.12f);
+
+        /// <summary>Below this condition the bar renders in the warning color.</summary>
+        private const float LowDurabilityThreshold = 0.25f;
+
         private InventoryUIController controller;
         private int slotIndex = -1;
 
@@ -41,6 +53,7 @@ namespace IslandGame.Inventory.UI
             {
                 icon.enabled = false;
                 countText.text = string.Empty;
+                SetDurabilityBar(false, 0f);
                 return;
             }
 
@@ -50,6 +63,28 @@ namespace IslandGame.Inventory.UI
             // draggable rather than invisible; the tooltip carries the name.
             icon.color = slot.Item.Icon != null ? Color.white : new Color(1f, 1f, 1f, 0.35f);
             countText.text = slot.Count > 1 ? slot.Count.ToString() : string.Empty;
+
+            // Minecraft-style: the strip appears only once the item has taken
+            // wear — pristine tools keep the slot clean.
+            SetDurabilityBar(slot.Item.HasDurability && slot.Durability01 < 1f, slot.Durability01);
+        }
+
+        private void SetDurabilityBar(bool visible, float durability01)
+        {
+            if (durabilityRoot == null)
+                return; // pre-durability canvas — rebuild the inventory UI to get the bar
+
+            durabilityRoot.SetActive(visible);
+            if (!visible || durabilityFill == null)
+                return;
+
+            durabilityFill.fillAmount = durability01;
+            // Green → yellow across the healthy range, hard warning red below
+            // the threshold (a color STATE, not just a darker green).
+            durabilityFill.color = durability01 < LowDurabilityThreshold
+                ? DurabilityLow
+                : Color.Lerp(DurabilityMid, DurabilityFull,
+                    Mathf.InverseLerp(LowDurabilityThreshold, 1f, durability01));
         }
 
         public void SetSelected(bool selected)

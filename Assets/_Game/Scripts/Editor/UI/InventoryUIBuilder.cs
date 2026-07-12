@@ -173,7 +173,29 @@ namespace IslandGame.EditorTools
             Stretch(count.rectTransform, 4f, 4f, 4f, 4f);
             count.raycastTarget = false;
 
-            Wire(view, ("icon", iconImage), ("countText", count), ("selectionHighlight", selectionImage));
+            // Durability strip (durability phase): a slim bar pinned to the
+            // slot's bottom edge; InventorySlotView shows it only on worn items.
+            RectTransform durabilityRoot = CreateRect("Durability", root);
+            durabilityRoot.anchorMin = new Vector2(0f, 0f);
+            durabilityRoot.anchorMax = new Vector2(1f, 0f);
+            durabilityRoot.offsetMin = new Vector2(5f, 4f);
+            durabilityRoot.offsetMax = new Vector2(-5f, 9f);
+            var durabilityBackground = durabilityRoot.gameObject.AddComponent<Image>();
+            durabilityBackground.color = new Color(0f, 0f, 0f, 0.7f);
+            durabilityBackground.raycastTarget = false;
+
+            RectTransform durabilityFillRect = CreateRect("Fill", durabilityRoot);
+            Stretch(durabilityFillRect, 1f, 1f, 1f, 1f);
+            var durabilityFill = durabilityFillRect.gameObject.AddComponent<Image>();
+            durabilityFill.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Background.psd");
+            durabilityFill.type = Image.Type.Filled;
+            durabilityFill.fillMethod = Image.FillMethod.Horizontal;
+            durabilityFill.fillOrigin = (int)Image.OriginHorizontal.Left;
+            durabilityFill.fillAmount = 1f;
+            durabilityFill.raycastTarget = false;
+
+            Wire(view, ("icon", iconImage), ("countText", count), ("selectionHighlight", selectionImage),
+                ("durabilityRoot", durabilityRoot.gameObject), ("durabilityFill", durabilityFill));
 
             root.gameObject.SetActive(false);
             return root.gameObject;

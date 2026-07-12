@@ -35,10 +35,17 @@ MonoBehaviour:
   miningSpeedMultiplier: 1
   miningRadius: 0
   efficientBlocks: []
+  maxDurability: 80
+  durabilityPerMiningHit: 1
+  durabilityPerAttackHit: 1
+  breakBehavior: 0
+  brokenVariant: {fileID: 0}
   holdType: 1
   holdSocket: 0
   holdLocalPosition: {x: 0, y: 0, z: 0}
   holdLocalRotationEuler: {x: 0, y: 0, z: 0}
   placedBlock: {fileID: 0}
   hungerRestore: 0
+  thirstRestore: 0
+  equipStatModifiers: []
   placedPiece: {fileID: 0}

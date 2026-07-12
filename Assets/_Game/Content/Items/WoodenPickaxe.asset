@@ -43,10 +43,17 @@ MonoBehaviour:
   - {fileID: 11400000, guid: d8e9bb3e9415f30478320a2bb5a1843a, type: 2}
   - {fileID: 11400000, guid: ee814da4e70088043acde09747b84d15, type: 2}
   - {fileID: 11400000, guid: 5892c51ba795d8a4386bc6d94af62385, type: 2}
+  maxDurability: 120
+  durabilityPerMiningHit: 1
+  durabilityPerAttackHit: 1
+  breakBehavior: 0
+  brokenVariant: {fileID: 0}
   holdType: 1
   holdSocket: 0
   holdLocalPosition: {x: 0, y: 0, z: 0}
   holdLocalRotationEuler: {x: 0, y: 0, z: 0}
   placedBlock: {fileID: 0}
   hungerRestore: 0
+  thirstRestore: 0
+  equipStatModifiers: []
   placedPiece: {fileID: 0}

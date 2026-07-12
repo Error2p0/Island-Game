@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using IslandGame.Data.Blocks;
 using IslandGame.Data.Building;
+using IslandGame.Data.Stats;
 using UnityEngine;
 
 namespace IslandGame.Data.Items
@@ -100,6 +101,25 @@ namespace IslandGame.Data.Items
         [Tooltip("Blocks this tool mines at full Mining Speed Multiplier; blocks outside the list (but within tier) mine at bare-hand speed. PERMISSION is always the tier check, this list is only the efficiency bonus.")]
         [SerializeField] private List<BlockDefinition> efficientBlocks = new List<BlockDefinition>();
 
+        [Header("Durability (tools & weapons; authored via the Item Editor)")]
+        [Tooltip("Durability points before breaking. 0 = never degrades (default — resources and pre-durability content are unaffected). Only read for items flagged Tool and/or Weapon.")]
+        [Min(0f)]
+        [SerializeField] private float maxDurability;
+
+        [Tooltip("Durability points lost per COMPLETED mining hit (a finished bite/block break — misses and aim time cost nothing).")]
+        [Min(0f)]
+        [SerializeField] private float durabilityPerMiningHit = 1f;
+
+        [Tooltip("Durability points lost per successful weapon use (melee hit that connects with a damageable, or one arrow fired).")]
+        [Min(0f)]
+        [SerializeField] private float durabilityPerAttackHit = 1f;
+
+        [Tooltip("What happens at 0 durability: Destroy removes the item; DowngradeToBrokenVariant swaps it for the Broken Variant item below.")]
+        [SerializeField] private ItemBreakBehavior breakBehavior = ItemBreakBehavior.Destroy;
+
+        [Tooltip("The weaker item this becomes when it breaks (only read for DowngradeToBrokenVariant). Author it as a normal item with worse stats; leave its own Max Durability at 0 so it can't break further, or give it a small pool for a second break.")]
+        [SerializeField] private ItemDefinition brokenVariant;
+
         [Header("Holding (read by the held-item phase — see HoldSocketConvention)")]
         [SerializeField] private HoldType holdType = HoldType.None;
 
@@ -119,6 +139,14 @@ namespace IslandGame.Data.Items
         [Tooltip("Hunger restored when eaten (category Consumable; the use/place button eats one unit — see PlayerStats). 0 = not edible.")]
         [Min(0f)]
         [SerializeField] private float hungerRestore;
+
+        [Tooltip("Thirst restored when consumed (category Consumable). Set on drinks and juicy food; 0 = restores no thirst.")]
+        [Min(0f)]
+        [SerializeField] private float thirstRestore;
+
+        [Header("Stat Modifiers (While Equipped)")]
+        [Tooltip("Stat modifiers active while this item is the equipped hotbar item (a pickaxe's mining_speed bonus, a future backpack's carry_capacity). Applied/removed by EquippedItemStatModifiers on equip change.")]
+        [SerializeField] private List<EquipStatModifier> equipStatModifiers = new List<EquipStatModifier>();
 
         [Header("Building Placement")]
         [Tooltip("For Placeable items: the building piece this item lets the player place (ghost preview + snapping while equipped). Same item→placed convention as Placed Block — set one or the other, never both.")]
@@ -150,6 +178,12 @@ namespace IslandGame.Data.Items
         /// <summary>Hunger restored when eaten; 0 = not edible.</summary>
         public float HungerRestore => hungerRestore;
 
+        /// <summary>Thirst restored when consumed; 0 = restores no thirst.</summary>
+        public float ThirstRestore => thirstRestore;
+
+        /// <summary>Stat modifiers active while equipped (see EquippedItemStatModifiers).</summary>
+        public IReadOnlyList<EquipStatModifier> EquipStatModifiers => equipStatModifiers;
+
         public bool IsTool => isTool;
         public ToolType ToolType => toolType;
         public int ToolTier => toolTier;
@@ -165,6 +199,19 @@ namespace IslandGame.Data.Items
         {
             return block != null && efficientBlocks.Contains(block);
         }
+
+        /// <summary>True when this item wears out with use: durability authored AND it's a tool or weapon.</summary>
+        public bool HasDurability => maxDurability > 0f && (isTool || isWeapon);
+
+        /// <summary>Durability points at full condition; 0 = never degrades.</summary>
+        public float MaxDurability => maxDurability;
+
+        public float DurabilityPerMiningHit => durabilityPerMiningHit;
+        public float DurabilityPerAttackHit => durabilityPerAttackHit;
+        public ItemBreakBehavior BreakBehavior => breakBehavior;
+
+        /// <summary>Replacement item on break when BreakBehavior is DowngradeToBrokenVariant.</summary>
+        public ItemDefinition BrokenVariant => brokenVariant;
 
         public HoldType HoldType => holdType;
         public HoldSocket HoldSocket => holdSocket;

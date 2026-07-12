@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using IslandGame.Data.Stats;
+using IslandGame.Stats;
 using UnityEngine;
 
 namespace IslandGame.Player
@@ -61,12 +63,13 @@ namespace IslandGame.Player
         [SerializeField] private float sprintForwardnessThreshold = 0.5f;
 
         [Header("Stamina Hook")]
-        [Tooltip("Stamina consumed per second of sprinting or fast swim strokes (1 = full bar).")]
+        [Tooltip("Stamina consumed per second of sprinting or fast swim strokes, as a fraction of a FULL bar (works in both modes — see below).")]
         [SerializeField] private float staminaDrainPerSecond = 0.125f;
 
+        [Tooltip("Fallback only: used when the player has no StatContainer with a 'stamina' stat. Stat-backed regen is authored on the Stamina StatDefinition instead.")]
         [SerializeField] private float staminaRegenPerSecond = 0.2f;
 
-        [Tooltip("Seconds after sprinting/fast strokes stop before regen begins.")]
+        [Tooltip("Fallback only: seconds after sprinting/fast strokes stop before regen begins. Stat-backed delay is authored on the Stamina StatDefinition instead.")]
         [SerializeField] private float staminaRegenDelay = 0.75f;
 
         [Tooltip("After draining to zero, stamina must recover to this fraction before sprint/fast stroke re-engages (prevents flickering at empty).")]
@@ -165,8 +168,14 @@ namespace IslandGame.Player
         /// <summary>True while swimming with the fast stroke engaged (drains stamina).</summary>
         public bool IsSwimFastStroke { get; private set; }
 
-        /// <summary>Stamina hook for the future stamina system/UI. 0-1. Shared by sprinting and fast swim strokes.</summary>
-        public float Stamina => stamina;
+        /// <summary>
+        /// Stamina 0-1, shared by sprinting and fast swim strokes. Backed by
+        /// the StatContainer's 'stamina' stat when present (the stats phase);
+        /// the original local float remains only as a fallback so rigs without
+        /// a StatContainer keep working. Never two live stamina values: exactly
+        /// one of the two backings is active.
+        /// </summary>
+        public float Stamina => staminaStat != null ? staminaStat.Normalized : stamina;
 
         /// <summary>True after stamina hit zero, until it recovers past the threshold.</summary>
         public bool IsExhausted => isExhausted;
@@ -224,6 +233,8 @@ namespace IslandGame.Player
         public Vector3 Velocity => references.Controller.velocity;
 
         private PlayerReferences references;
+        private StatContainer statContainer;
+        private StatInstance staminaStat;
         private Vector3 horizontalVelocity;
         private float verticalVelocity;
         private Vector3 swimVelocity;
@@ -263,6 +274,13 @@ namespace IslandGame.Player
         {
             references = GetComponent<PlayerReferences>();
             lastGroundedMaxSpeed = walkSpeed;
+
+            // Stats phase: when the rig carries a StatContainer with a stamina
+            // stat, that stat REPLACES the local placeholder float (container
+            // instances build lazily, so Awake order is safe).
+            statContainer = GetComponent<StatContainer>();
+            if (statContainer != null)
+                statContainer.TryGetInstance(StatIds.Stamina, out staminaStat);
         }
 
         private void OnEnable()
@@ -391,12 +409,12 @@ namespace IslandGame.Player
 
         private void UpdateSwimming(Vector2 move, float deltaTime)
         {
-            if (isExhausted && stamina >= exhaustionRecoveryThreshold)
+            if (isExhausted && Stamina >= exhaustionRecoveryThreshold)
                 isExhausted = false;
 
             PlayerInputHandler input = references.InputHandler;
 
-            IsSwimFastStroke = input.SprintHeld && hasMoveInput && !isExhausted && stamina > 0f
+            IsSwimFastStroke = input.SprintHeld && hasMoveInput && !isExhausted && Stamina > 0f
                                && SprintAllowedByLoad;
 
             // Camera-relative 3D movement: looking up + forward swims upward.
@@ -484,12 +502,17 @@ namespace IslandGame.Player
         }
 
         /// <summary>
-        /// Adjusts stamina by a delta (consumables, damage effects later). Clamped 0-1.
+        /// Adjusts stamina by a normalized delta, 1 = a full bar (consumables,
+        /// damage effects later). Routed into the stat when stat-backed.
         /// </summary>
         public void ModifyStamina(float delta)
         {
-            stamina = Mathf.Clamp01(stamina + delta);
-            if (stamina <= 0f)
+            if (staminaStat != null)
+                statContainer.Modify(StatIds.Stamina, delta * staminaStat.ModifiedValue);
+            else
+                stamina = Mathf.Clamp01(stamina + delta);
+
+            if (Stamina <= 0f)
                 isExhausted = true;
         }
 
@@ -500,14 +523,14 @@ namespace IslandGame.Player
 
         private void UpdateSprint(float forwardness)
         {
-            if (isExhausted && stamina >= exhaustionRecoveryThreshold)
+            if (isExhausted && Stamina >= exhaustionRecoveryThreshold)
                 isExhausted = false;
 
             bool wantsSprint = references.InputHandler.SprintHeld
                                && hasMoveInput
                                && forwardness >= sprintForwardnessThreshold;
 
-            bool canAffordSprint = !isExhausted && stamina > 0f;
+            bool canAffordSprint = !isExhausted && Stamina > 0f;
 
             // Sprint only applies in locomotion-owned states; Crouching, Prone
             // and Swimming are not among them. Heavy loads also block it.
@@ -522,6 +545,23 @@ namespace IslandGame.Player
         {
             // One shared resource: sprinting on land and fast swim strokes both
             // drain it (requirement: never a second stamina variable).
+            if (staminaStat != null)
+            {
+                // Stat-backed: this method only DRAINS; regen, its delay and
+                // any survival penalties are the StatContainer's job (the
+                // container's regen delay re-arms on every decrease, which is
+                // exactly the old lastSprintTime behavior).
+                if (IsSprinting || IsSwimFastStroke)
+                {
+                    statContainer.Modify(
+                        StatIds.Stamina, -staminaDrainPerSecond * staminaStat.ModifiedValue * deltaTime);
+                    if (Stamina <= 0f)
+                        isExhausted = true;
+                }
+
+                return;
+            }
+
             if (IsSprinting || IsSwimFastStroke)
             {
                 lastSprintTime = Time.time;

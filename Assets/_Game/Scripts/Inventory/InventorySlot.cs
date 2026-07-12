@@ -6,9 +6,10 @@ namespace IslandGame.Inventory
 {
     /// <summary>
     /// One inventory slot: an ItemDefinition reference, a stack count, and the
-    /// per-instance durability hook (unused until the durability phase, present
-    /// now so slots never need restructuring — restructuring would break every
-    /// save). Mutated only by InventorySystem; everything else reads.
+    /// per-instance durability (reserved since the inventory phase, live since
+    /// the durability phase — this field IS the single runtime home of an
+    /// item's condition, and the field save/load serializes). Mutated only by
+    /// InventorySystem; everything else reads.
     /// </summary>
     [Serializable]
     public sealed class InventorySlot
@@ -20,8 +21,14 @@ namespace IslandGame.Inventory
         public ItemDefinition Item => item;
         public int Count => count;
 
-        /// <summary>0-1 condition of the stack. Meaningful for unstackables (tools/weapons); reserved for the durability phase.</summary>
+        /// <summary>0-1 condition of the stack. Meaningful for unstackables (tools/weapons); 1 for everything else.</summary>
         public float Durability01 => durability01;
+
+        /// <summary>Durability write, used by InventorySystem's wear/repair paths only.</summary>
+        internal void SetDurability01(float value)
+        {
+            durability01 = Mathf.Clamp01(value);
+        }
 
         public bool IsEmpty => item == null || count <= 0;
 
