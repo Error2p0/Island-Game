@@ -86,6 +86,94 @@ namespace IslandGame.Terrain
         public IslandWorldGenerator ActiveIslandGenerator =>
             initialized && !useDebugFlatGenerator ? islandGenerator : null;
 
+        // ------------------------------------------------------------------
+        // Save/load (delta model — see SaveManager for the format rationale)
+        // ------------------------------------------------------------------
+
+        // Loaded deltas waiting for their chunk to stream in. Applied right
+        // after baseline generation, so loading never blocks on the world.
+        private readonly Dictionary<Vector2Int, ChunkDelta> pendingDeltas = new Dictionary<Vector2Int, ChunkDelta>();
+
+        /// <summary>Every chunk with data this session (save iterates these for IsModified).</summary>
+        public IEnumerable<Chunk> LoadedChunks => chunks.Values;
+
+        /// <summary>
+        /// Regenerates a chunk's pristine baseline for delta diffing at save
+        /// time. A fresh Chunk, NOT registered anywhere — compare and discard.
+        /// </summary>
+        public Chunk GenerateBaselineChunk(Vector2Int coord)
+        {
+            var baseline = new Chunk(coord);
+            activeGenerator.Generate(baseline);
+            return baseline;
+        }
+
+        /// <summary>Load-time seed override — call in the scene-loaded callback, before Start initializes the generator.</summary>
+        public void ApplyLoadedSeed(int seed)
+        {
+            if (initialized)
+            {
+                Debug.LogError("VoxelWorld: ApplyLoadedSeed called after initialization — the seed cannot change mid-session.", this);
+                return;
+            }
+
+            islandGenerator.SetSeed(seed);
+        }
+
+        /// <summary>Queues one chunk's saved delta; it applies the moment that chunk's baseline generates (chunk-streamed loading).</summary>
+        public void RegisterPendingChunkDelta(Vector2Int coord, ChunkDelta delta)
+        {
+            if (delta != null)
+                pendingDeltas[coord] = delta;
+        }
+
+        /// <summary>
+        /// Replays a saved delta onto a freshly generated chunk: block edits
+        /// (string ids resolved against the live palette — unknown ids skip
+        /// with one warning instead of corrupting the chunk), then sub-voxel
+        /// promotions. Set/Promote run AFTER MarkGenerated, so the chunk is
+        /// IsModified again and the next save re-persists it.
+        /// </summary>
+        private void ApplyPendingDelta(Chunk chunk, ChunkDelta delta)
+        {
+            // Resolve the per-delta string table once.
+            var resolvedIds = new ushort[delta.BlockIdTable.Length];
+            for (int i = 0; i < delta.BlockIdTable.Length; i++)
+            {
+                string blockId = delta.BlockIdTable[i];
+                if (string.IsNullOrEmpty(blockId))
+                {
+                    resolvedIds[i] = BlockPalette.AirId;
+                }
+                else if (!palette.TryGetIdByStringId(blockId, out resolvedIds[i]))
+                {
+                    resolvedIds[i] = BlockPalette.AirId;
+                    Debug.LogWarning(
+                        $"VoxelWorld: saved block id '{blockId}' no longer exists — those cells load as air.", this);
+                }
+            }
+
+            for (int i = 0; i < delta.CellIndices.Length; i++)
+            {
+                Chunk.UnflattenIndex(delta.CellIndices[i], out int x, out int y, out int z);
+                chunk.Set(x, y, z, resolvedIds[delta.BlockIdTableIndices[i]]);
+            }
+
+            for (int i = 0; i < delta.Promotions.Count; i++)
+            {
+                PromotedCellDelta promotion = delta.Promotions[i];
+                Chunk.UnflattenIndex(promotion.CellIndex, out int x, out int y, out int z);
+                if (chunk.Get(x, y, z) == BlockPalette.AirId)
+                    continue; // block edit above already emptied it (or bad data)
+
+                SubVoxelGrid grid = chunk.PromoteToSubVoxels(x, y, z, promotion.Resolution);
+                if (!grid.ImportBits(promotion.Bits))
+                    Debug.LogWarning($"VoxelWorld: promoted-cell payload mismatch at {chunk.Coord} index {promotion.CellIndex} — cell stays intact.", this);
+            }
+
+            chunk.MarkSubVoxelsModified();
+        }
+
         private void Start()
         {
             BlockDatabase database = BlockDatabase.Instance;
@@ -595,11 +683,18 @@ namespace IslandGame.Terrain
                 // Only genuinely NEW chunks generate; anything already in the
                 // dictionary (including everything the player edited) is left
                 // untouched — IsGenerated/IsModified flag exactly that for the
-                // future save phase.
+                // save phase.
                 var chunk = new Chunk(coord);
                 activeGenerator.Generate(chunk);
                 chunk.MarkGenerated();
                 chunks.Add(coord, chunk);
+
+                // Loaded-game deltas replay here, per chunk as it streams in.
+                if (pendingDeltas.Count > 0 && pendingDeltas.TryGetValue(coord, out ChunkDelta delta))
+                {
+                    ApplyPendingDelta(chunk, delta);
+                    pendingDeltas.Remove(coord);
+                }
 
                 if (--budget <= 0)
                     return;

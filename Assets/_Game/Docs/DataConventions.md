@@ -582,3 +582,40 @@ unused value/bit, never reorder, renumber or delete entries.**
   (Coast), abandoned_camp (functional campfire/workbench). Menu: Island
   Game/Data/Create Example Structures + World/Add Structure System; both are
   BuildEverything steps.
+
+## Save/Load (persistence phase)
+
+- **Format**: one JSON document per slot (JsonUtility), at
+  `persistentDataPath/Saves/{slot}.json`. JSON over binary because the DELTA
+  model keeps payloads in the tens of KB, JsonUtility's ignore-unknown /
+  default-missing semantics ARE the required additive version resilience
+  (`SaveGame.version` warns on newer files), and text saves are debuggable.
+  Sub-voxel bitsets ride as Base64. Escape hatch at MB scale: gzip the file.
+- **Terrain = deltas only**: untouched chunks regenerate from the seed;
+  each IsModified chunk diffs against a regenerated baseline
+  (`VoxelWorld.GenerateBaselineChunk`) — block edits as flattened index → a
+  per-chunk block-ID STRING table (numeric palette ids are session-local),
+  promoted cells as (index, resolution, bitset). On load, deltas register
+  with VoxelWorld and apply per chunk AS IT STREAMS IN — loading never
+  blocks on the world.
+- **Load lifecycle** (SaveManager reloads the scene; scene must be in Build
+  Settings): PRE-START pass (sceneLoaded, after Awake/before Start): seed,
+  chunk deltas, world time, structure processed cells. POST-START pass (one
+  frame later): player pose/inventory/stats, placed pieces + functional
+  state, guard spawners. Restoring earlier gets overwritten by Start
+  (starting items, stat instances); restoring cells later races the
+  structure system's first tick.
+- **Modifiers are never saved** — all re-derived (PlayerSurvival re-applies
+  within a tick; equip modifiers re-fire via the inventory notification).
+  Stat CURRENT values save per stable stat ID; attribute currents are
+  ignored on restore (SetCurrent is Resource-only) by design.
+- **Pieces**: pieceId + pose + health + optional functional payloads
+  (campfire fuel/lit, door open — pose saves the CLOSED rotation via
+  DoorBehavior.PersistedRotation — chest slots). Structure guard spawners
+  persist separately (SavedGuardSpawner) because restored processed cells
+  suppress re-placement.
+- **Wild creatures deliberately don't persist** (pooled/ephemeral by
+  design; spawners repopulate). `SaveGame.ownedCreatures` is reserved for a
+  future taming phase. Ground WorldItems also don't persist (accepted loss).
+- Adding save state in future phases: add fields WITH DEFAULTS to the
+  SaveGame tree + a Write/Restore pair in SaveManager — nothing else.

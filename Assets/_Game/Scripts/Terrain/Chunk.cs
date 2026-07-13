@@ -143,6 +143,29 @@ namespace IslandGame.Terrain
                 IsModified = true;
         }
 
+        // ------------------------------------------------------------------
+        // Save phase
+        // ------------------------------------------------------------------
+
+        private static readonly Dictionary<int, SubVoxelGrid> EmptyPromotions = new Dictionary<int, SubVoxelGrid>();
+
+        /// <summary>Every promoted cell as (flattened local index, grid) — the save phase persists these alongside block deltas.</summary>
+        public IReadOnlyDictionary<int, SubVoxelGrid> PromotedCells => subVoxels ?? EmptyPromotions;
+
+        /// <summary>The flattened-index math, public for the save phase's delta encoding.</summary>
+        public static int FlattenIndex(int x, int y, int z)
+        {
+            return Index(x, y, z);
+        }
+
+        /// <summary>Inverse of FlattenIndex, for applying loaded deltas.</summary>
+        public static void UnflattenIndex(int index, out int x, out int y, out int z)
+        {
+            x = index & (SizeX - 1);
+            z = (index / SizeX) & (SizeZ - 1);
+            y = index / (SizeX * SizeZ);
+        }
+
         // Y-major layout: one full 16×16 horizontal slice per Y keeps the
         // mesher's x/z inner loops on adjacent memory.
         private static int Index(int x, int y, int z)

@@ -115,6 +115,15 @@ namespace IslandGame.Building
             worldRotation = transform.rotation * socket.LocalRotation;
         }
 
+        /// <summary>Load phase: restores saved health after Initialize filled it to max. Clamped to (0, MaxHealth].</summary>
+        public void RestoreHealth(float health)
+        {
+            if (!initialized)
+                return;
+
+            currentHealth = Mathf.Clamp(health, 1f, MaxHealth);
+        }
+
         public void ApplyDamage(in DamageInfo damage)
         {
             if (!initialized || currentHealth <= 0f)

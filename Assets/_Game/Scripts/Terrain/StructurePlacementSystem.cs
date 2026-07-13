@@ -71,9 +71,34 @@ namespace IslandGame.Terrain
 
         private readonly HashSet<Vector2Int> processedCells = new HashSet<Vector2Int>();
         private readonly List<StructureTemplate> eligibleBuffer = new List<StructureTemplate>(8);
+        private readonly List<CreatureSpawner> guardSpawners = new List<CreatureSpawner>();
 
         private PlayerReferences player;
         private float nextTickTime;
+
+        /// <summary>Save phase: the cells already evaluated this session — persisted so looted ruins never re-place on load.</summary>
+        public void WriteProcessedCells(List<Vector2Int> output)
+        {
+            output.Clear();
+            output.AddRange(processedCells);
+        }
+
+        /// <summary>Load phase: marks saved cells as done BEFORE the first tick (the save system calls this in its scene-loaded pass).</summary>
+        public void RestoreProcessedCells(IEnumerable<Vector2Int> cells)
+        {
+            foreach (Vector2Int cell in cells)
+                processedCells.Add(cell);
+        }
+
+        /// <summary>Guard spawners this system created (structures' creature nests) — runtime objects the save phase must persist itself, since restored processed cells suppress re-placement.</summary>
+        public IReadOnlyList<CreatureSpawner> GuardSpawners => guardSpawners;
+
+        /// <summary>Load phase: recreates one saved guard spawner (the same construction placement uses).</summary>
+        public void RestoreGuardSpawner(
+            CreatureDefinition creature, Vector3 position, int maxPopulation, float spawnRadius, bool spawnOnlyAtNight)
+        {
+            CreateGuardSpawner(creature, position, maxPopulation, spawnRadius, spawnOnlyAtNight);
+        }
 
         private void Start()
         {
@@ -306,16 +331,26 @@ namespace IslandGame.Terrain
                 if (entry?.creature == null)
                     continue;
 
-                var spawnerObject = new GameObject($"StructureGuards_{entry.creature.Id}");
-                spawnerObject.transform.SetParent(transform, false);
-                spawnerObject.transform.position = origin + yawRotation * entry.localOffset;
-                spawnerObject.AddComponent<CreatureSpawner>()
-                    .Configure(entry.creature, entry.maxPopulation, entry.spawnRadius, entry.spawnOnlyAtNight);
+                CreateGuardSpawner(
+                    entry.creature, origin + yawRotation * entry.localOffset,
+                    entry.maxPopulation, entry.spawnRadius, entry.spawnOnlyAtNight);
             }
 
             Debug.Log(
                 $"[Structures] Placed '{template.DisplayName}' ({placedCount} piece(s), yaw {yaw:0}°) at " +
                 $"({origin.x:0}, {origin.y:0}, {origin.z:0}).");
+        }
+
+        private void CreateGuardSpawner(
+            CreatureDefinition creature, Vector3 position, int maxPopulation, float spawnRadius, bool spawnOnlyAtNight)
+        {
+            var spawnerObject = new GameObject($"StructureGuards_{creature.Id}");
+            spawnerObject.transform.SetParent(transform, false);
+            spawnerObject.transform.position = position;
+
+            var spawner = spawnerObject.AddComponent<CreatureSpawner>();
+            spawner.Configure(creature, maxPopulation, spawnRadius, spawnOnlyAtNight);
+            guardSpawners.Add(spawner);
         }
 
         /// <summary>The exact instantiation contract player placement uses: prefab under the registry, Initialize(definition) → health, registry, functional Init.</summary>

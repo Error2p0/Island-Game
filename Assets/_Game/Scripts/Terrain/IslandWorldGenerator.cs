@@ -200,6 +200,19 @@ namespace IslandGame.Terrain
         // same height/biome data trees already use).
         // ------------------------------------------------------------------
 
+        /// <summary>The world seed (saved so untouched chunks regenerate identically on load).</summary>
+        public int Seed => seed;
+
+        /// <summary>
+        /// Load-time seed override. Must be called BEFORE Initialize runs
+        /// (the save system applies it in the scene-loaded callback, ahead of
+        /// VoxelWorld.Start) — the noise offsets derive from it there.
+        /// </summary>
+        public void SetSeed(int newSeed)
+        {
+            seed = newSeed;
+        }
+
         /// <summary>Water surface height, for beach/water site rules.</summary>
         public int SeaLevelY => seaLevel;
 

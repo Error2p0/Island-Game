@@ -29,6 +29,19 @@ namespace IslandGame.Building
 
         public bool IsOpen => open;
 
+        /// <summary>
+        /// Save phase: the pose to PERSIST for this piece. An open door's
+        /// transform is mid-swing — saving that would make load's Init treat
+        /// the open pose as closed; the closed rotation is the stable one.
+        /// </summary>
+        public Quaternion PersistedRotation => initialized ? closedRotation : transform.rotation;
+
+        /// <summary>Load phase: restores the open flag after Init captured the (closed) placed pose; Update swings it there.</summary>
+        public void RestoreOpen(bool isOpen)
+        {
+            open = isOpen;
+        }
+
         public string InteractionPrompt => open ? "Close door" : "Open door";
 
         public void Init(BuildingPiece owner)

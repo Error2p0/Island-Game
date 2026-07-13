@@ -152,6 +152,20 @@ namespace IslandGame.Building
             }
         }
 
+        /// <summary>Save phase: the fire's whole runtime state is fuel + lit.</summary>
+        public void GetSaveState(out float fuel, out bool lit)
+        {
+            fuel = fuelSeconds;
+            lit = isLit;
+        }
+
+        /// <summary>Load phase: restores fuel and lit state (visuals update through the normal path).</summary>
+        public void RestoreSaveState(float fuel, bool lit)
+        {
+            fuelSeconds = Mathf.Clamp(fuel, 0f, maxFuelSeconds);
+            SetLit(lit && fuelSeconds > 0f);
+        }
+
         private void SetLit(bool lit)
         {
             if (isLit == lit)

@@ -38,6 +38,12 @@ namespace IslandGame.Player
         /// <summary>Current camera pitch in degrees (negative = looking up).</summary>
         public float Pitch { get; private set; }
 
+        /// <summary>Load-time restore: sets the pitch directly (the next look update applies and re-clamps it).</summary>
+        public void RestorePitch(float pitch)
+        {
+            Pitch = Mathf.Clamp(pitch, -89f, 89f);
+        }
+
         private PlayerReferences references;
 
         private float ProneBlend =>

@@ -94,6 +94,11 @@ namespace IslandGame.Creatures
 
         public CreatureDefinition Definition => definition;
 
+        // Save-phase reads (structure guard spawners persist their config).
+        public int MaxPopulation => maxPopulation;
+        public float SpawnRadius => spawnRadius;
+        public bool SpawnOnlyAtNight => spawnOnlyAtNight;
+
         /// <summary>Structures/world-gen phases configure placed spawners through this before first tick.</summary>
         public void SetDefinition(CreatureDefinition creatureDefinition)
         {

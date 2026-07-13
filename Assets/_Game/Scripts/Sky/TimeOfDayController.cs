@@ -139,6 +139,16 @@ namespace IslandGame.Sky
         }
 
         /// <summary>
+        /// Load-time restore: time AND day counter in one silent jump (same
+        /// no-events rule as SetTimeOfDay — consumers re-read properties).
+        /// </summary>
+        public void RestoreTime(float normalizedTime, int dayNumber)
+        {
+            TimeOfDay01 = Mathf.Repeat(normalizedTime, 1f);
+            DayNumber = Mathf.Max(0, dayNumber);
+        }
+
+        /// <summary>
         /// `previous` is unwrapped (may exceed 1) so a threshold is crossed
         /// iff it lies in (previous, advanced] — handles midnight wrap and
         /// multiple thresholds inside one fast-forwarded frame alike.

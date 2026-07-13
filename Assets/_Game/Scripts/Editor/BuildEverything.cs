@@ -77,6 +77,7 @@ namespace IslandGame.EditorTools
                 ("Build crafting menu UI", CraftingMenuUIBuilder.Build),
                 ("Build stats HUD", StatsHudBuilder.Build),
                 ("Create example creature spawners", CreatureContentCreator.CreateExampleSpawners),
+                ("Add save system", SaveSystemBuilder.Create),
                 ("Place player at spawn", PlacePlayerAtSpawn),
             };
 
@@ -136,6 +137,7 @@ namespace IslandGame.EditorTools
             DeleteByName("CraftingMenuCanvas");
             DeleteByName("StatsHudCanvas");
             DeleteByName("CreatureSpawners");
+            DeleteByName("SaveSystem");
 
             var world = UnityEngine.Object.FindFirstObjectByType<VoxelWorld>();
             if (world != null)

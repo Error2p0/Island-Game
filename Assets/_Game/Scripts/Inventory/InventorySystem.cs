@@ -358,6 +358,37 @@ namespace IslandGame.Inventory
         }
 
         // ------------------------------------------------------------------
+        // Save/load (slot-level state access; content stays ID-referenced)
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Load-time slot write: sets one slot silently (no notification —
+        /// call NotifyExternalRestore once after the loop). Null item clears
+        /// the slot. Out-of-range indices (save from a differently-sized
+        /// inventory) are ignored with a warning.
+        /// </summary>
+        public void RestoreSlot(int index, ItemDefinition item, int count, float durability01)
+        {
+            EnsureSlots();
+            if (index < 0 || index >= slots.Length)
+            {
+                Debug.LogWarning($"[InventorySystem] Restored slot index {index} out of range ({slots.Length} slots) — skipped.", this);
+                return;
+            }
+
+            if (item == null || count <= 0)
+                slots[index].Clear();
+            else
+                slots[index].Set(item, Mathf.Min(count, item.MaxStackSize), durability01);
+        }
+
+        /// <summary>One change notification after a batch of RestoreSlot calls — weight, views and equip state all refresh.</summary>
+        public void NotifyExternalRestore()
+        {
+            NotifyChanged();
+        }
+
+        // ------------------------------------------------------------------
         // Durability (the reserved per-slot field, live since this phase)
         // ------------------------------------------------------------------
 

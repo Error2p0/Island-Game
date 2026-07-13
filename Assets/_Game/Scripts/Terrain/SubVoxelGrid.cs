@@ -126,6 +126,45 @@ namespace IslandGame.Terrain
             return true;
         }
 
+        // ------------------------------------------------------------------
+        // Save phase
+        // ------------------------------------------------------------------
+
+        /// <summary>The raw bitset as bytes (little-endian ulongs) — the save phase Base64s this.</summary>
+        public byte[] ExportBits()
+        {
+            var data = new byte[bits.Length * 8];
+            System.Buffer.BlockCopy(bits, 0, data, 0, data.Length);
+            return data;
+        }
+
+        /// <summary>
+        /// Overwrites the bitset from ExportBits data and recounts FilledCount.
+        /// False (grid unchanged) when the payload length doesn't match this
+        /// grid's resolution — a corrupt or resolution-mismatched save line.
+        /// </summary>
+        public bool ImportBits(byte[] data)
+        {
+            if (data == null || data.Length != bits.Length * 8)
+                return false;
+
+            System.Buffer.BlockCopy(data, 0, bits, 0, data.Length);
+
+            int filled = 0;
+            for (int i = 0; i < bits.Length; i++)
+            {
+                ulong value = bits[i];
+                while (value != 0)
+                {
+                    value &= value - 1; // clear lowest set bit
+                    filled++;
+                }
+            }
+
+            FilledCount = filled;
+            return true;
+        }
+
         // Y-major like Chunk: consecutive x is consecutive bits.
         private int Index(int x, int y, int z)
         {
