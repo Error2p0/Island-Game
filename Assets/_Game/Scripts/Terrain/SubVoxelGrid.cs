@@ -165,6 +165,26 @@ namespace IslandGame.Terrain
             return true;
         }
 
+        /// <summary>
+        /// True when the other grid has the same resolution and identical bits.
+        /// The save phase uses this to skip promotions that match the
+        /// regenerated baseline — generation-time surface shaping promotes the
+        /// whole surface shell, and only player-touched grids are worth saving.
+        /// </summary>
+        public bool ContentEquals(SubVoxelGrid other)
+        {
+            if (other == null || other.Resolution != Resolution || other.FilledCount != FilledCount)
+                return false;
+
+            for (int i = 0; i < bits.Length; i++)
+            {
+                if (bits[i] != other.bits[i])
+                    return false;
+            }
+
+            return true;
+        }
+
         // Y-major like Chunk: consecutive x is consecutive bits.
         private int Index(int x, int y, int z)
         {

@@ -45,6 +45,15 @@ namespace IslandGame.Terrain
     /// streams a ring beyond render distance, build reach is meters), so
     /// trees provably predate any player structure in their area — no
     /// PlacedPieceRegistry check is needed at generation time.
+    ///
+    /// ORGANIC SURFACE (organic-terrain phase): when enabled, each column's
+    /// fill is shaped by OrganicSurfaceShaper — solid blocks up to the band
+    /// the fine heightfield crosses, then that band is promoted and carved
+    /// through the destruction system's existing sub-voxel pipeline. The
+    /// coarse noise above is untouched (same seeds keep their islands);
+    /// SampleHeight becomes shaping-aware so trees and structures sit on the
+    /// surface the player actually sees. Interior blocks and the deep ocean
+    /// floor never promote — see the shaper's performance notes.
     /// </summary>
     [Serializable]
     public sealed class IslandWorldGenerator : IChunkGenerator
@@ -112,6 +121,10 @@ namespace IslandGame.Terrain
         [Range(0f, 1f)]
         [SerializeField] private float treeDensity = 0.35f;
 
+        [Header("Organic Surface (Sub-Voxel Shaping)")]
+        [Tooltip("Generation-time surface shaping through the destruction system's promote-and-carve pipeline: sloped beaches, rolling hills and cliff faces instead of block stair-steps. Interior terrain and the deep ocean floor stay plain blocks.")]
+        [SerializeField] private OrganicSurfaceSettings organicSurface = new OrganicSurfaceSettings();
+
         [Header("Blocks (string IDs)")]
         [SerializeField] private string stoneBlockId = "stone";
         [SerializeField] private string dirtBlockId = "dirt";
@@ -132,6 +145,12 @@ namespace IslandGame.Terrain
         private readonly List<TreeTemplateDefinition> treeTemplates = new List<TreeTemplateDefinition>();
         private float treeWeightTotal;
         private int treeScanMargin;
+
+        // Organic-terrain phase: the shaper drives the sub-voxel pipeline at
+        // generation time. Null when disabled — every path below then falls
+        // back to the exact pre-organic blocky behavior.
+        private OrganicSurfaceShaper surfaceShaper;
+        private int surfaceSubVoxelResolution = 8;
 
         public void Initialize(BlockPalette palette)
         {
@@ -158,7 +177,23 @@ namespace IslandGame.Terrain
             floorOffset = MakeOffset(random);
 
             this.palette = palette;
+
+            surfaceShaper = organicSurface != null && organicSurface.enabled
+                ? new OrganicSurfaceShaper(
+                    ComputeContinuousHeight, organicSurface, seed, surfaceSubVoxelResolution, seaLevel)
+                : null;
+
             InitializeTrees(palette);
+        }
+
+        /// <summary>
+        /// VoxelWorld hands over its configured sub-voxel resolution BEFORE
+        /// Initialize, so generation-shaped cells are the same kind of grid as
+        /// damage-promoted ones (one resolution, one meshing path).
+        /// </summary>
+        public void ConfigureSurfaceDetail(int subVoxelResolution)
+        {
+            surfaceSubVoxelResolution = subVoxelResolution;
         }
 
         private void InitializeTrees(BlockPalette blockPalette)
@@ -219,9 +254,17 @@ namespace IslandGame.Terrain
         /// <summary>Columns topping out within this band of sea level are sand (the tree/structure 'not grass' rule).</summary>
         public int BeachBandSize => beachBand;
 
-        /// <summary>Terrain height at a column — the same pure function chunk filling uses. Valid after Initialize.</summary>
+        /// <summary>
+        /// Terrain height (top solid block + 1) at a column — the same pure
+        /// function chunk filling uses, INCLUDING organic surface shaping, so
+        /// trees/structures sit on the surface the player actually sees.
+        /// Valid after Initialize.
+        /// </summary>
         public int SampleHeight(float worldX, float worldZ)
         {
+            if (surfaceShaper != null && surfaceShaper.TrySampleSurfaceHeight(worldX, worldZ, out int shaped))
+                return shaped;
+
             return ComputeColumnHeight(worldX, worldZ);
         }
 
@@ -239,14 +282,24 @@ namespace IslandGame.Terrain
             int originX = chunk.Coord.x * Chunk.SizeX;
             int originZ = chunk.Coord.y * Chunk.SizeZ;
 
+            surfaceShaper?.BeginChunk(originX, originZ);
+
             for (int z = 0; z < Chunk.SizeZ; z++)
             {
                 for (int x = 0; x < Chunk.SizeX; x++)
                 {
-                    float worldX = originX + x;
-                    float worldZ = originZ + z;
+                    if (surfaceShaper != null)
+                    {
+                        surfaceShaper.ShapeColumn(x, z, out OrganicSurfaceShaper.ColumnShape shape);
+                        if (shape.Shaped)
+                        {
+                            FillShapedColumn(chunk, x, z, in shape);
+                            surfaceShaper.ApplyColumn(chunk, x, z, in shape);
+                            continue;
+                        }
+                    }
 
-                    int height = ComputeColumnHeight(worldX, worldZ);
+                    int height = ComputeColumnHeight(originX + x, originZ + z);
                     FillColumn(chunk, x, z, height);
                 }
             }
@@ -288,7 +341,9 @@ namespace IslandGame.Terrain
                     // Suitable surface only: grassy land above the beach band
                     // (FillColumn's rule — sand/underwater columns never get
                     // grass, so this is exactly "grass, not sand/stone").
-                    int surface = ComputeColumnHeight(worldX, worldZ);
+                    // SampleHeight is shaping-aware, so the base cell sits on
+                    // the surface the shaper actually produced.
+                    int surface = SampleHeight(worldX, worldZ);
                     if (surface <= seaLevel + beachBand)
                         continue;
 
@@ -299,6 +354,39 @@ namespace IslandGame.Terrain
                     int yawSteps = (int)(Hash01(anchorX, anchorZ, 105) * 4f);
                     TreeRasterizer.Rasterize(
                         chunk, palette, template, new Vector3Int(worldX, surface, worldZ), yawSteps);
+                    AnchorTreeBase(chunk, originX, originZ, worldX, surface - 1, worldZ);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Organic shaping leaves the block under a trunk partially carved, and
+        /// TreeRasterizer never overwrites terrain — so refill that one grid to
+        /// solid or trunks hover above the fine surface on their downhill side.
+        /// Reads as a small root mound. Only the chunk that owns the column
+        /// writes it (order-independent, deterministic — the same ownership
+        /// rule rasterization itself follows).
+        /// </summary>
+        private static void AnchorTreeBase(Chunk chunk, int originX, int originZ, int worldX, int y, int worldZ)
+        {
+            if (y < 0 || y >= Chunk.SizeY)
+                return;
+
+            int localX = worldX - originX;
+            int localZ = worldZ - originZ;
+            if (localX < 0 || localX >= Chunk.SizeX || localZ < 0 || localZ >= Chunk.SizeZ)
+                return;
+
+            if (!chunk.TryGetSubVoxels(localX, y, localZ, out SubVoxelGrid grid))
+                return; // plain full block — already solid ground
+
+            int res = grid.Resolution;
+            for (int sy = 0; sy < res; sy++)
+            {
+                for (int sz = 0; sz < res; sz++)
+                {
+                    for (int sx = 0; sx < res; sx++)
+                        grid.Set(sx, sy, sz, true);
                 }
             }
         }
@@ -337,6 +425,18 @@ namespace IslandGame.Terrain
 
         private int ComputeColumnHeight(float worldX, float worldZ)
         {
+            return Mathf.RoundToInt(ComputeContinuousHeight(worldX, worldZ));
+        }
+
+        /// <summary>
+        /// The un-rounded column height — the organic surface shaper's coarse
+        /// field (it samples this at block corners and interpolates between).
+        /// Rounding this IS the pre-organic blocky height, so both fill paths
+        /// derive from one function. Clamp bounds are integers, so
+        /// round-then-clamp and clamp-then-round agree exactly.
+        /// </summary>
+        private float ComputeContinuousHeight(float worldX, float worldZ)
+        {
             float mask = Fbm(maskOffsets, worldX, worldZ, islandMaskFrequency);
             float landFactor = Mathf.SmoothStep(0f, 1f,
                 Mathf.InverseLerp(landThreshold, landThreshold + coastFalloff, mask));
@@ -356,7 +456,7 @@ namespace IslandGame.Terrain
                 worldZ * islandMaskFrequency * 4f + floorOffset.y));
             float oceanFloor = seaLevel - oceanDepth + floorNoise * this.oceanFloorNoise;
 
-            return Mathf.Clamp(Mathf.RoundToInt(Mathf.Lerp(oceanFloor, landHeight, landFactor)), 2, Chunk.SizeY - 2);
+            return Mathf.Clamp(Mathf.Lerp(oceanFloor, landHeight, landFactor), 2f, Chunk.SizeY - 2f);
         }
 
         private void FillColumn(Chunk chunk, int x, int z, int height)
@@ -386,11 +486,48 @@ namespace IslandGame.Terrain
             }
         }
 
+        /// <summary>
+        /// Block fill for an organically shaped column: solid up to the shaped
+        /// band's top (ApplyColumn immediately carves the band blocks down to
+        /// the fine surface). Biome layering is measured from the band so the
+        /// VISUALLY topmost filled sub-cells carry the biome surface material:
+        /// every partially-filled band block is grass (or sand on beaches and
+        /// shallow floors), with dirt/stone depth counted below the band —
+        /// matching FillColumn's layer thicknesses on flat ground.
+        /// </summary>
+        private void FillShapedColumn(Chunk chunk, int x, int z, in OrganicSurfaceShaper.ColumnShape shape)
+        {
+            int topSolid = shape.TopSolidY;
+            int height = topSolid + 1;
+            bool sandy = height <= seaLevel + beachBand; // beaches AND shaped shallow floors
+            int bandMin = Mathf.Min(shape.BandMinY, topSolid);
+
+            for (int y = 0; y < height; y++)
+            {
+                ushort id;
+                if (sandy)
+                    id = topSolid - y < sandDepth ? sandId : stoneId;
+                else if (y >= bandMin)
+                    id = grassId;
+                else
+                    id = bandMin - y <= dirtDepth ? dirtId : stoneId;
+
+                chunk.Set(x, y, z, id);
+            }
+
+            if (waterId != BlockPalette.AirId)
+            {
+                for (int y = height; y < seaLevel; y++)
+                    chunk.Set(x, y, z, waterId);
+            }
+        }
+
         // ------------------------------------------------------------------
         // Noise plumbing
         // ------------------------------------------------------------------
 
-        private static float Fbm(Vector2[] octaveOffsets, float x, float z, float frequency)
+        /// <summary>Octave-stacked Perlin, normalized to [0,1]. Internal so OrganicSurfaceShaper reuses the exact same noise plumbing for its fine relief term.</summary>
+        internal static float Fbm(Vector2[] octaveOffsets, float x, float z, float frequency)
         {
             float total = 0f;
             float amplitude = 1f;

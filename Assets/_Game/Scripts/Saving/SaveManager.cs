@@ -256,6 +256,15 @@ namespace IslandGame.Saving
 
                 foreach (KeyValuePair<int, SubVoxelGrid> promotion in chunk.PromotedCells)
                 {
+                    // Organic surface shaping promotes the whole surface shell
+                    // at generation time — a grid identical to the regenerated
+                    // baseline's is pristine terrain that replays for free on
+                    // load, so only player-touched grids are persisted.
+                    Chunk.UnflattenIndex(promotion.Key, out int px, out int py, out int pz);
+                    if (baseline.TryGetSubVoxels(px, py, pz, out SubVoxelGrid baselineGrid)
+                        && baselineGrid.ContentEquals(promotion.Value))
+                        continue;
+
                     delta.promotions.Add(new SavedPromotedCell
                     {
                         cellIndex = promotion.Key,

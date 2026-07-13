@@ -201,6 +201,9 @@ namespace IslandGame.Terrain
             atlas = BlockTextureAtlas.Build(database.All);
             CreateMaterials();
             activeGenerator = useDebugFlatGenerator ? (IChunkGenerator)debugGenerator : islandGenerator;
+            // Generation-time surface shaping must promote at the same
+            // resolution damage does — one grid kind, one meshing path.
+            islandGenerator.ConfigureSurfaceDetail(subVoxelResolution);
             activeGenerator.Initialize(palette);
             sortedOffsets = BuildSortedOffsets(renderDistance + 2);
             supportCollapse = new SupportCollapseSystem(this);
