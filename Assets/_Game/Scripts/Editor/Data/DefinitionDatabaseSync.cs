@@ -6,6 +6,7 @@ using IslandGame.Data.Blocks;
 using IslandGame.Data.Building;
 using IslandGame.Data.Crafting;
 using IslandGame.Data.Creatures;
+using IslandGame.Data.Foliage;
 using IslandGame.Data.Items;
 using IslandGame.Data.Stats;
 using IslandGame.Data.World;
@@ -38,6 +39,7 @@ namespace IslandGame.EditorTools.Data
             SyncDatabase<StatDefinition, StatDatabase>("StatDatabase");
             SyncDatabase<CreatureDefinition, CreatureDatabase>("CreatureDatabase");
             SyncDatabase<StructureTemplate, StructureTemplateDatabase>("StructureTemplateDatabase");
+            SyncDatabase<FoliageDefinition, FoliageDatabase>("FoliageDatabase");
             AssetDatabase.SaveAssets();
         }
 

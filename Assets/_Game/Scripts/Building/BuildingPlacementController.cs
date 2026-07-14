@@ -40,6 +40,10 @@ namespace IslandGame.Building
     ///   contact never false-positives. Voxel TERRAIN overlap is deliberately
     ///   legal (foundations sink into uneven ground — the reference games'
     ///   behavior); anything else (placed pieces, the player, props) blocks.
+    ///   Since the organic-terrain phase, FREE placement additionally requires
+    ///   ground support: footprint probes against the real (sub-voxel) surface
+    ///   must all find terrain/pieces below, within a slope tolerance — see
+    ///   HasGroundSupport. Snapped placements are exempt (sockets = support).
     ///
     ///   CONFIRM — place button instantiates the real prefab under the
     ///   registry and calls BuildingPiece.Initialize (registry registration +
@@ -86,6 +90,13 @@ namespace IslandGame.Building
         [Header("Validity")]
         [Tooltip("Meters shaved off every overlap box side so flush contact with the snapped-to piece never reads as overlap.")]
         [SerializeField] private float overlapSkin = 0.05f;
+
+        [Header("Ground (Free Placement)")]
+        [Tooltip("Every footprint probe of a FREE-placed piece must find support (voxel terrain or a placed piece) within this many meters below the piece base. Snapped pieces skip the check — their support comes through the socket.")]
+        [SerializeField] private float groundProbeDepth = 2f;
+
+        [Tooltip("Maximum height difference between the footprint's ground probes, meters. Organic terrain slopes — beyond this the ground is too steep/uneven to build on unprepared; mine it flat first, like the reference games.")]
+        [SerializeField] private float maxGroundUnevenness = 0.75f;
 
         [SerializeField] private Color validGhostColor = new Color(0.25f, 0.9f, 0.35f, 0.4f);
         [SerializeField] private Color invalidGhostColor = new Color(0.95f, 0.25f, 0.2f, 0.4f);
@@ -215,7 +226,8 @@ namespace IslandGame.Building
                 ghostRotation = desiredRotation;
             }
 
-            poseValid = !HasBlockingOverlap(piece.Prefab, ghostPosition, ghostRotation);
+            poseValid = !HasBlockingOverlap(piece.Prefab, ghostPosition, ghostRotation)
+                        && (poseSnapped || HasGroundSupport(piece.Prefab, ghostPosition, ghostRotation));
             RefreshCost(piece);
             hasPose = true;
 
@@ -475,6 +487,106 @@ namespace IslandGame.Building
 
             shapeCache.Add(prefab, shapes);
             return shapes;
+        }
+
+        // ------------------------------------------------------------------
+        // Ground support (organic-terrain phase)
+        // ------------------------------------------------------------------
+
+        // Probe corners sit at half the footprint extents so a piece may hang
+        // slightly over a ledge without rejecting — the reference games allow
+        // modest overhang as long as the body of the piece is grounded.
+        private const float GroundProbeInset = 0.5f;
+        private const float GroundProbeStartAbove = 0.5f;
+
+        /// <summary>
+        /// Free placement must rest on real ground: five probes across the
+        /// piece footprint (center + inset corners at its base height) each
+        /// raycast down and must find voxel terrain or a placed piece within
+        /// Ground Probe Depth, and the spread between the highest and lowest
+        /// support must stay within Max Ground Unevenness. Terrain is now
+        /// organically sloped and the probes hit the ACTUAL sub-voxel carved
+        /// collision, so this is the real surface, not the block grid. Snapped
+        /// pieces never get here — sockets carry their support.
+        /// </summary>
+        private bool HasGroundSupport(GameObject prefab, Vector3 position, Quaternion rotation)
+        {
+            List<OverlapShape> shapes = GetOverlapShapes(prefab);
+            if (shapes.Count == 0)
+                return true; // no volume — nothing that could float or bury
+
+            // Footprint = local AABB over every overlap box's rotated corners.
+            var bounds = new Bounds(shapes[0].LocalCenter, Vector3.zero);
+            for (int s = 0; s < shapes.Count; s++)
+            {
+                OverlapShape shape = shapes[s];
+                Vector3 e = shape.LocalHalfExtents;
+                for (int corner = 0; corner < 8; corner++)
+                {
+                    var local = new Vector3(
+                        (corner & 1) == 0 ? -e.x : e.x,
+                        (corner & 2) == 0 ? -e.y : e.y,
+                        (corner & 4) == 0 ? -e.z : e.z);
+                    bounds.Encapsulate(shape.LocalCenter + shape.LocalRotation * local);
+                }
+            }
+
+            float baseY = bounds.min.y;
+            Vector3 center = bounds.center;
+            float insetX = bounds.extents.x * GroundProbeInset;
+            float insetZ = bounds.extents.z * GroundProbeInset;
+
+            float highest = float.MinValue;
+            float lowest = float.MaxValue;
+            for (int i = 0; i < 5; i++)
+            {
+                var probeLocal = new Vector3(
+                    i == 0 ? center.x : (i & 1) == 0 ? center.x - insetX : center.x + insetX,
+                    baseY,
+                    i == 0 ? center.z : (i & 2) == 0 ? center.z - insetZ : center.z + insetZ);
+
+                if (!ProbeGround(position + rotation * probeLocal, out float supportY))
+                    return false; // a footprint corner hangs over nothing
+
+                if (supportY > highest)
+                    highest = supportY;
+                if (supportY < lowest)
+                    lowest = supportY;
+            }
+
+            return highest - lowest <= maxGroundUnevenness;
+        }
+
+        /// <summary>One downward support probe: the topmost terrain/piece surface below the point, if any is in range.</summary>
+        private bool ProbeGround(Vector3 point, out float supportY)
+        {
+            supportY = float.MinValue;
+            Vector3 origin = point + Vector3.up * GroundProbeStartAbove;
+            int count = Physics.RaycastNonAlloc(
+                origin, Vector3.down, rayBuffer, GroundProbeStartAbove + groundProbeDepth,
+                ~0, QueryTriggerInteraction.Ignore);
+
+            bool found = false;
+            for (int i = 0; i < count; i++)
+            {
+                RaycastHit hit = rayBuffer[i];
+                if (hit.collider == null)
+                    continue;
+
+                // Support = the voxel world or an existing structure. Loose
+                // props, items, creatures and the player do NOT hold a house up.
+                if (hit.collider.GetComponentInParent<ChunkView>() == null
+                    && hit.collider.GetComponentInParent<BuildingPiece>() == null)
+                    continue;
+
+                if (hit.point.y > supportY)
+                {
+                    supportY = hit.point.y;
+                    found = true;
+                }
+            }
+
+            return found;
         }
 
         // ------------------------------------------------------------------

@@ -48,6 +48,19 @@ namespace IslandGame.Terrain
         [Range(2, 16)]
         [SerializeField] private int subVoxelResolution = 8;
 
+        [Header("Detail LOD & Frame Budgets")]
+        [Tooltip("Chunks within this Chebyshev chunk radius of the player mesh their full sub-voxel surface detail; farther chunks mesh promoted cells as plain full blocks. Chunk DATA keeps its detail everywhere — only meshes simplify — so saves, mining and determinism are untouched. Keep it 2-3 below Render Distance so distant terrain actually simplifies, and ≥ 2 so detail rebuilds before the player arrives.")]
+        [Range(1, 16)]
+        [SerializeField] private int detailMeshRadius = 3;
+
+        [Tooltip("Soft per-frame time budget (ms) for chunk DATA generation. The count budget above still caps; this adapts to organic-surface land chunks costing several times an ocean chunk.")]
+        [Range(0.5f, 16f)]
+        [SerializeField] private float generationBudgetMs = 4f;
+
+        [Tooltip("Soft per-frame time budget (ms) for streaming mesh builds and LOD transitions (player edits still remesh immediately).")]
+        [Range(0.5f, 16f)]
+        [SerializeField] private float meshingBudgetMs = 6f;
+
         [Header("Generation")]
         [SerializeField] private IslandWorldGenerator islandGenerator = new IslandWorldGenerator();
 
@@ -85,6 +98,58 @@ namespace IslandGame.Terrain
         /// <summary>The procedural generator when active; null in debug-flat mode (structures don't place there).</summary>
         public IslandWorldGenerator ActiveIslandGenerator =>
             initialized && !useDebugFlatGenerator ? islandGenerator : null;
+
+        // ------------------------------------------------------------------
+        // Streaming stats (read by TerrainPerfOverlay — cheap, no allocation)
+        // ------------------------------------------------------------------
+
+        private static readonly System.Diagnostics.Stopwatch budgetTimer = new System.Diagnostics.Stopwatch();
+        private static readonly System.Diagnostics.Stopwatch taskTimer = new System.Diagnostics.Stopwatch();
+
+        /// <summary>Milliseconds the most recent chunk data generation took.</summary>
+        public float LastGenerateMs { get; private set; }
+
+        /// <summary>Exponential moving average of chunk generation times, ms.</summary>
+        public float AverageGenerateMs { get; private set; }
+
+        /// <summary>Milliseconds the most recent mesh build (incl. collider re-cook) took.</summary>
+        public float LastMeshMs { get; private set; }
+
+        /// <summary>Exponential moving average of mesh build times, ms.</summary>
+        public float AverageMeshMs { get; private set; }
+
+        public int LoadedChunkCount => chunks.Count;
+
+        public int MeshedViewCount => views.Count;
+
+        public int DetailMeshRadius => detailMeshRadius;
+
+        /// <summary>Views currently built at the full sub-voxel detail LOD.</summary>
+        public int CountDetailedViews()
+        {
+            int count = 0;
+            foreach (ChunkView view in views.Values)
+            {
+                if (view.DetailBuilt)
+                    count++;
+            }
+
+            return count;
+        }
+
+        /// <summary>Total promoted (sub-voxel) cells across all resident chunk data.</summary>
+        public long CountPromotedCells()
+        {
+            long count = 0;
+            foreach (Chunk chunk in chunks.Values)
+                count += chunk.PromotedCount;
+            return count;
+        }
+
+        private static float Ema(float average, float sample)
+        {
+            return average <= 0f ? sample : average + (sample - average) * 0.1f;
+        }
 
         // ------------------------------------------------------------------
         // Save/load (delta model — see SaveManager for the format rationale)
@@ -280,6 +345,7 @@ namespace IslandGame.Terrain
 
             chunk.Set(localX, worldPos.y, localZ, blockId);
             RemeshBlockAndBorders(coord, localX, localZ);
+            TerrainVersion++;
 
             // Removal may strand a NeedsSupport region (tree crowns).
             if (blockId == BlockPalette.AirId)
@@ -287,6 +353,14 @@ namespace IslandGame.Terrain
 
             return true;
         }
+
+        /// <summary>
+        /// Bumped on every geometry-affecting terrain edit (block writes,
+        /// sub-voxel carves, debris removal). Read-only consumers — the mining
+        /// preview — compare it to know their cached view of the terrain went
+        /// stale, without subscribing to anything.
+        /// </summary>
+        public int TerrainVersion { get; private set; }
 
         public bool SetBlock(Vector3Int worldPos, BlockDefinition block)
         {
@@ -382,6 +456,7 @@ namespace IslandGame.Terrain
 
             chunk.MarkSubVoxelsModified();
             RemeshBlockAndBorders(coord, localX, localZ);
+            TerrainVersion++;
             return true;
         }
 
@@ -487,7 +562,134 @@ namespace IslandGame.Terrain
             for (int i = 0; i < carveRemovedCells.Count; i++)
                 supportCollapse?.NotifyBlockRemoved(carveRemovedCells[i]);
 
+            if (clearedTotal > 0)
+                TerrainVersion++;
+
             return clearedTotal;
+        }
+
+        /// <summary>
+        /// Read-only twin of CarveSphere for the mining preview (organic-
+        /// terrain phase 3): visits every sub-cell CENTER inside the sphere
+        /// that is currently solid — unpromoted non-air blocks count as fully
+        /// solid within their bounds, promoted grids report their real
+        /// occupancy — and whose block passes canCarve (null = no filter,
+        /// used by the blocked-state preview). NEVER promotes or mutates
+        /// anything, so it is safe to run every frame. Output is global
+        /// sub-cell lattice coordinates (cell × resolution + sub-index) at
+        /// the world's configured resolution; a legacy grid at a different
+        /// resolution is sampled proportionally, matching the mesher's
+        /// stitching rule. Returns the number of sub-cells added.
+        /// </summary>
+        public int CollectCarvePreview(
+            Vector3 worldCenter, float radius,
+            System.Predicate<BlockDefinition> canCarve, List<Vector3Int> subCells)
+        {
+            if (radius <= 0f)
+                return 0;
+
+            float radiusSqr = radius * radius;
+            int res = subVoxelResolution;
+            float subSize = 1f / res;
+            int added = 0;
+
+            int minX = Mathf.FloorToInt(worldCenter.x - radius);
+            int maxX = Mathf.FloorToInt(worldCenter.x + radius);
+            int minY = Mathf.Max(0, Mathf.FloorToInt(worldCenter.y - radius));
+            int maxY = Mathf.Min(Chunk.SizeY - 1, Mathf.FloorToInt(worldCenter.y + radius));
+            int minZ = Mathf.FloorToInt(worldCenter.z - radius);
+            int maxZ = Mathf.FloorToInt(worldCenter.z + radius);
+
+            for (int cy = minY; cy <= maxY; cy++)
+            {
+                for (int cz = minZ; cz <= maxZ; cz++)
+                {
+                    for (int cx = minX; cx <= maxX; cx++)
+                    {
+                        var coord = new Vector2Int(cx >> Chunk.Shift, cz >> Chunk.Shift);
+                        if (!chunks.TryGetValue(coord, out Chunk chunk))
+                            continue;
+
+                        int localX = cx & Chunk.Mask;
+                        int localZ = cz & Chunk.Mask;
+                        ushort id = chunk.Get(localX, cy, localZ);
+                        if (id == BlockPalette.AirId)
+                            continue;
+
+                        BlockDefinition definition = palette.GetDefinition(id);
+                        if (canCarve != null && !canCarve(definition))
+                            continue;
+
+                        // Sphere vs cell AABB quick reject — same as CarveSphere.
+                        float dx = worldCenter.x - Mathf.Clamp(worldCenter.x, cx, cx + 1f);
+                        float dy = worldCenter.y - Mathf.Clamp(worldCenter.y, cy, cy + 1f);
+                        float dz = worldCenter.z - Mathf.Clamp(worldCenter.z, cz, cz + 1f);
+                        if (dx * dx + dy * dy + dz * dz > radiusSqr)
+                            continue;
+
+                        chunk.TryGetSubVoxels(localX, cy, localZ, out SubVoxelGrid grid);
+                        var cell = new Vector3Int(cx, cy, cz);
+
+                        for (int sy = 0; sy < res; sy++)
+                        {
+                            for (int sz = 0; sz < res; sz++)
+                            {
+                                for (int sx = 0; sx < res; sx++)
+                                {
+                                    if (!SubCellInSphere(cell, sx, sy, sz, subSize, worldCenter, radiusSqr))
+                                        continue;
+
+                                    if (grid != null && !grid.Get(
+                                            sx * grid.Resolution / res,
+                                            sy * grid.Resolution / res,
+                                            sz * grid.Resolution / res))
+                                        continue;
+
+                                    subCells.Add(new Vector3Int(cx * res + sx, cy * res + sy, cz * res + sz));
+                                    added++;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            return added;
+        }
+
+        /// <summary>
+        /// Read-only preview of ONE whole cell (classic radius-less mining):
+        /// its real sub-cell occupancy, full when unpromoted. Same lattice
+        /// output convention as CollectCarvePreview. Returns cells added.
+        /// </summary>
+        public int CollectCellPreview(Vector3Int cell, List<Vector3Int> subCells)
+        {
+            if (GetBlockId(cell) == BlockPalette.AirId)
+                return 0;
+
+            SubVoxelGrid grid = GetSubVoxelGrid(cell);
+            int res = subVoxelResolution;
+            int added = 0;
+
+            for (int sy = 0; sy < res; sy++)
+            {
+                for (int sz = 0; sz < res; sz++)
+                {
+                    for (int sx = 0; sx < res; sx++)
+                    {
+                        if (grid != null && !grid.Get(
+                                sx * grid.Resolution / res,
+                                sy * grid.Resolution / res,
+                                sz * grid.Resolution / res))
+                            continue;
+
+                        subCells.Add(new Vector3Int(cell.x * res + sx, cell.y * res + sy, cell.z * res + sz));
+                        added++;
+                    }
+                }
+            }
+
+            return added;
         }
 
         private int CarveCell(
@@ -638,6 +840,9 @@ namespace IslandGame.Terrain
 
             foreach (Vector2Int coord in carveDirtyChunks)
                 RebuildIfMeshed(coord);
+
+            if (carveDirtyChunks.Count > 0)
+                TerrainVersion++;
         }
         /// <summary>
         /// True when this chunk or any horizontal neighbor holds promoted
@@ -674,6 +879,13 @@ namespace IslandGame.Terrain
             int dataDistance = renderDistance + 1;
             int budget = dataBudgetPerFrame;
 
+            // Time-boxed on top of the count cap: organic-surface land chunks
+            // cost several times an ocean chunk, so a fixed count alone would
+            // spike frames when the ring crosses onto an island. At least one
+            // chunk always generates, so streaming can never stall entirely.
+            budgetTimer.Restart();
+            long budgetTicks = (long)(generationBudgetMs * System.Diagnostics.Stopwatch.Frequency / 1000f);
+
             foreach (Vector2Int offset in sortedOffsets)
             {
                 if (Chebyshev(offset) > dataDistance)
@@ -687,6 +899,7 @@ namespace IslandGame.Terrain
                 // dictionary (including everything the player edited) is left
                 // untouched — IsGenerated/IsModified flag exactly that for the
                 // save phase.
+                taskTimer.Restart();
                 var chunk = new Chunk(coord);
                 activeGenerator.Generate(chunk);
                 chunk.MarkGenerated();
@@ -699,7 +912,10 @@ namespace IslandGame.Terrain
                     pendingDeltas.Remove(coord);
                 }
 
-                if (--budget <= 0)
+                LastGenerateMs = taskTimer.ElapsedTicks * 1000f / System.Diagnostics.Stopwatch.Frequency;
+                AverageGenerateMs = Ema(AverageGenerateMs, LastGenerateMs);
+
+                if (--budget <= 0 || budgetTimer.ElapsedTicks > budgetTicks)
                     return;
             }
         }
@@ -707,6 +923,8 @@ namespace IslandGame.Terrain
         private void BuildChunkMeshes(Vector2Int center)
         {
             int budget = meshBudgetPerFrame;
+            budgetTimer.Restart();
+            long budgetTicks = (long)(meshingBudgetMs * System.Diagnostics.Stopwatch.Frequency / 1000f);
 
             foreach (Vector2Int offset in sortedOffsets)
             {
@@ -714,13 +932,32 @@ namespace IslandGame.Terrain
                     continue;
 
                 Vector2Int coord = center + offset;
-                if (views.ContainsKey(coord) || !chunks.ContainsKey(coord) || !NeighborsHaveData(coord))
+
+                // Two reasons to (re)build, both through the same budget and
+                // nearest-first order: a missing view, or a view whose LOD no
+                // longer matches its distance (detail LOD transitions) —
+                // approaching chunks re-detail before the player arrives,
+                // receding ones drop back to cheap block meshes.
+                if (views.TryGetValue(coord, out ChunkView view))
+                {
+                    if (view.DetailBuilt == WantsDetail(coord, center))
+                        continue;
+                }
+                else if (!chunks.ContainsKey(coord) || !NeighborsHaveData(coord))
+                {
                     continue;
+                }
 
                 RebuildChunkMesh(coord);
-                if (--budget <= 0)
+                if (--budget <= 0 || budgetTimer.ElapsedTicks > budgetTicks)
                     return;
             }
+        }
+
+        /// <summary>Full sub-voxel detail inside the detail radius; simplified block meshes beyond.</summary>
+        private bool WantsDetail(Vector2Int coord, Vector2Int center)
+        {
+            return Chebyshev(coord - center) <= detailMeshRadius;
         }
 
         private void ReleaseFarViews(Vector2Int center)
@@ -754,8 +991,17 @@ namespace IslandGame.Terrain
                 view.Bind(coord);
             }
 
-            mesher.Build(chunk, this, palette, atlas, view.RenderMesh, view.CollisionMesh);
+            // Edit-path remeshes land here too and inherit the CURRENT desired
+            // LOD — edits happen within reach, i.e. well inside detail range.
+            bool detail = WantsDetail(coord, WorldToChunkCoord(player.position));
+
+            taskTimer.Restart();
+            mesher.Build(chunk, this, palette, atlas, view.RenderMesh, view.CollisionMesh, detail);
             view.RefreshAfterBuild(mesher.HasCollision);
+            view.DetailBuilt = detail;
+
+            LastMeshMs = taskTimer.ElapsedTicks * 1000f / System.Diagnostics.Stopwatch.Frequency;
+            AverageMeshMs = Ema(AverageMeshMs, LastMeshMs);
         }
 
         private void RebuildIfMeshed(Vector2Int coord)

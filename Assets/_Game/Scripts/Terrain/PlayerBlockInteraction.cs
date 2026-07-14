@@ -22,15 +22,22 @@ namespace IslandGame.Terrain
     /// Blocked-vs-slow was our call; blocked reads clearest without UI and
     /// matches the survival references. Unbreakable-flagged blocks never mine.
     ///
-    /// RADIUS MINING (small-voxel phase): when the equipped tool has a
-    /// MiningRadius > 0, a COMPLETED mining hit carves a sub-voxel sphere at
-    /// the aim point (biased a quarter-radius into the surface so bites eat
+    /// RADIUS MINING (small-voxel phase): when the effective MiningProfile has
+    /// a Radius > 0, a COMPLETED mining hit carves a sub-voxel sphere at the
+    /// aim point (biased a quarter-radius into the surface so bites eat
     /// material, not air) instead of deleting the whole block — timing, tier
     /// permission and the crack overlay are the exact same pipeline, only the
     /// geometry outcome changes. The sphere may span several blocks; cells
-    /// above the tool's tier, unbreakable, liquid or non-solid are skipped by
-    /// the permission filter. Radius 0 (bare hands, unauthored tools) keeps
-    /// classic whole-block mining unchanged.
+    /// above the profile's tier, unbreakable, liquid or non-solid are skipped
+    /// by the permission filter. Radius ≤ 0 (radius-less authored tools)
+    /// keeps classic whole-block mining unchanged.
+    ///
+    /// MINING PROFILE (organic-terrain phase 3): every tier/speed/radius read
+    /// goes through MiningProfile.Resolve(equipped) — including the implicit
+    /// BARE HANDS profile (tier 0, small radius, slow) when nothing tool-like
+    /// is equipped, so hands dig soft ground organically through the exact
+    /// same code path tools use. MiningRadiusIndicator previews the same
+    /// profile, which is what makes the highlight trustworthy.
     ///
     /// DROP RULE (deliberate): a block yields its DropItem only when its cell
     /// FULLY empties — partial carving is visual chip-away with the reward on
@@ -54,6 +61,12 @@ namespace IslandGame.Terrain
     {
         [Tooltip("Maximum mine/place distance from the camera, meters.")]
         [SerializeField] private float reach = 4.5f;
+
+        // How far a hit point steps through/off the hit face to identify the
+        // cell: big enough to clear float error on the face plane, smaller
+        // than the smallest sub-cell (1/16 block), so sub-voxel-shaped
+        // surfaces resolve to the block the player is actually looking at.
+        private const float FaceStepIn = 0.05f;
 
         [Tooltip("Wired by the Voxel World builder; auto-resolved when empty.")]
         [SerializeField] private VoxelWorld world;
@@ -95,6 +108,13 @@ namespace IslandGame.Terrain
         public bool HasMiningTarget => hasMiningTarget;
 
         public Vector3Int MiningCell => miningCell;
+
+        /// <summary>
+        /// The effective mining parameters this frame (equipped tool or the
+        /// bare-hands fallback) — the SAME values the next completed bite
+        /// executes with. MiningRadiusIndicator renders exactly this.
+        /// </summary>
+        public MiningProfile ActiveProfile { get; private set; } = MiningProfile.Resolve(null);
 
         private void Awake()
         {
@@ -149,11 +169,21 @@ namespace IslandGame.Terrain
             AimedBlock = null;
             AimedBlockMinable = false;
 
+            // Refresh the profile every frame regardless of aim — the same
+            // per-frame equipped read as before, now through the one resolver.
+            ActiveProfile = MiningProfile.Resolve(selector != null ? selector.EquippedItem : null);
+
             if (!RaycastVoxels(out RaycastHit hit))
                 return;
 
-            // Step half a block INTO the face to land inside the aimed block.
-            Vector3Int cell = Vector3Int.FloorToInt(hit.point - hit.normal * 0.5f);
+            // Step slightly INTO the face to land inside the aimed block.
+            // Half a block worked when every face lay on the block grid, but
+            // organic/carved surfaces put sub-voxel faces anywhere inside a
+            // cell — a half-block step through a thin partial shell selects
+            // the block BEHIND the one the player actually sees (wrong tier
+            // check, wrong block mined). FaceStepIn clears face-plane float
+            // error while staying below one sub-cell (1/16 block = 0.0625).
+            Vector3Int cell = Vector3Int.FloorToInt(hit.point - hit.normal * FaceStepIn);
             BlockDefinition block = world.GetBlock(cell);
             if (block == null)
                 return;
@@ -164,10 +194,7 @@ namespace IslandGame.Terrain
             AimedHitPoint = hit.point;
             AimedHitNormal = hit.normal;
 
-            ItemDefinition equipped = selector != null ? selector.EquippedItem : null;
-            int tier = equipped != null && equipped.IsTool ? equipped.ToolTier : 0;
-            AimedBlockMinable = !block.HasBehavior(BlockBehaviorFlags.Unbreakable)
-                                && block.RequiredToolTier <= tier;
+            AimedBlockMinable = ActiveProfile.CanMine(block);
         }
 
         // ------------------------------------------------------------------
@@ -192,9 +219,9 @@ namespace IslandGame.Terrain
                 miningProgressSeconds = 0f;
             }
 
-            ItemDefinition equipped = selector != null ? selector.EquippedItem : null;
-            bool usingTool = equipped != null && equipped.IsTool;
-            float speed = usingTool && equipped.IsEfficientAgainst(block) ? equipped.MiningSpeedMultiplier : 1f;
+            // Profile rate: authored efficiency for tools, the slow bare-hands
+            // rate otherwise — one rule, shared with the preview's state.
+            float speed = ActiveProfile.SpeedAgainst(block);
 
             // Stats phase: the mining_speed stat multiplies ON TOP of the
             // tool's authored efficiency, so equip modifiers and future buffs
@@ -213,20 +240,22 @@ namespace IslandGame.Terrain
         }
 
         /// <summary>
-        /// One completed mining hit: radius-carve when the equipped tool has a
-        /// MiningRadius, classic whole-block removal otherwise. Permission was
-        /// already enforced for the AIMED block (AimedBlockMinable); the carve
-        /// filter re-applies the same rules per overlapped cell, since a
-        /// sphere can span block types the tool is not rated for.
+        /// One completed mining hit: radius-carve when the effective profile
+        /// has a radius (tools and bare hands alike), classic whole-block
+        /// removal otherwise. Permission was already enforced for the AIMED
+        /// block (AimedBlockMinable); the carve filter re-applies the same
+        /// rules per overlapped cell, since a sphere can span block types the
+        /// profile is not rated for. Radius, center bias and filter all come
+        /// from ActiveProfile — identical to what the indicator previewed.
         /// </summary>
         private void CompleteMiningBite(Vector3Int cell, BlockDefinition block)
         {
             ItemDefinition equipped = selector != null ? selector.EquippedItem : null;
-            float radius = equipped != null && equipped.IsTool ? equipped.MiningRadius : 0f;
+            MiningProfile profile = ActiveProfile;
 
-            if (radius <= 0f)
+            if (profile.Radius <= 0f)
             {
-                // Classic path — unchanged behavior for radius-less tools/hands.
+                // Classic path — unchanged behavior for radius-less tools.
                 if (world.SetBlock(cell, BlockPalette.AirId))
                 {
                     GrantDrops(cell, block);
@@ -237,13 +266,10 @@ namespace IslandGame.Terrain
                 return;
             }
 
-            // Bias the sphere a quarter-radius into the surface: centered
-            // exactly on the face, half the bite would carve air.
-            Vector3 center = AimedHitPoint - AimedHitNormal * (radius * 0.25f);
-            int tier = equipped.ToolTier;
+            Vector3 center = profile.CarveCenter(AimedHitPoint, AimedHitNormal);
 
             carvedBuffer.Clear();
-            int cleared = world.CarveSphere(center, radius, def => CanCarve(def, tier), carvedBuffer);
+            int cleared = world.CarveSphere(center, profile.Radius, profile.CanCarve, carvedBuffer);
 
             // Fully-emptied cells pay out exactly like classic mining.
             for (int i = 0; i < carvedBuffer.Count; i++)
@@ -270,16 +296,6 @@ namespace IslandGame.Terrain
                 return;
 
             inventory.ApplyDurabilityDamage(selector.SelectedIndex, equipped.DurabilityPerMiningHit);
-        }
-
-        /// <summary>Per-cell carve permission: same tier/unbreakable policy as aiming, plus liquids and non-solids stay untouched by tools.</summary>
-        private static bool CanCarve(BlockDefinition definition, int tier)
-        {
-            return definition != null
-                   && definition.IsSolid
-                   && !definition.HasBehavior(BlockBehaviorFlags.Unbreakable)
-                   && !definition.HasBehavior(BlockBehaviorFlags.Liquid)
-                   && definition.RequiredToolTier <= tier;
         }
 
         /// <summary>The one drop-granting path — classic breaks and fully-carved cells both land here.</summary>
@@ -324,8 +340,13 @@ namespace IslandGame.Terrain
             if (!RaycastVoxels(out RaycastHit hit))
                 return;
 
-            // Step half a block OUT of the face to land in the adjacent cell.
-            Vector3Int cell = Vector3Int.FloorToInt(hit.point + hit.normal * 0.5f);
+            // Step slightly OUT of the face (see FaceStepIn in UpdateAim):
+            // grid-aligned faces land in the adjacent cell exactly as before,
+            // while an interior sub-voxel face (carved crater wall) lands in
+            // its own still-occupied cell and is correctly rejected below —
+            // the old half-block step would have placed a floating block one
+            // cell out from the visible surface.
+            Vector3Int cell = Vector3Int.FloorToInt(hit.point + hit.normal * FaceStepIn);
             if (cell.y < 0 || cell.y >= Chunk.SizeY)
                 return;
 

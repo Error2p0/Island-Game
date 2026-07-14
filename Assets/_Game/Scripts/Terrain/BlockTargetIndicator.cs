@@ -5,34 +5,25 @@ using UnityEngine.Rendering;
 namespace IslandGame.Terrain
 {
     /// <summary>
-    /// In-world feedback for block interaction, driven entirely by
-    /// PlayerBlockInteraction's aim/mining state:
+    /// BREAK-PROGRESS feedback for block interaction, driven entirely by
+    /// PlayerBlockInteraction's mining state: a crack overlay on the mined
+    /// block stepping through procedurally generated stages (cumulative
+    /// cracks) as MiningProgress01 advances — the hook reserved in Phase 6.
     ///
-    ///   - SELECTION: a thin wireframe box around the aimed block — white when
-    ///     the equipped tier can mine it, red when it's tier-blocked or
-    ///     unbreakable (making Phase 6's "blocked outright" policy visible).
-    ///   - BREAK PROGRESS: a crack overlay on the mined block stepping through
-    ///     procedurally generated stages (cumulative cracks) as
-    ///     MiningProgress01 advances — the hook reserved in Phase 6.
+    /// The SELECTION wireframe this component used to draw was removed in the
+    /// organic-terrain phase: MiningRadiusIndicator now shows the true
+    /// sphere-of-effect (including the blocked/red permission state) instead
+    /// of a single-block box, so only one aim highlight ever renders.
     ///
-    /// Both visuals are plain scene objects created at Start (axis-aligned,
-    /// unparented so player rotation can't tilt them) and torn down with the
+    /// The overlay is a plain scene object created at Start (axis-aligned,
+    /// unparented so player rotation can't tilt it) and torn down with the
     /// component. No materials or textures to author.
     /// </summary>
     [DisallowMultipleComponent]
     [RequireComponent(typeof(PlayerBlockInteraction))]
     public sealed class BlockTargetIndicator : MonoBehaviour
     {
-        private const float WireInflation = 1.002f;  // hair above the block surface — no z-fighting
-        private const float CrackInflation = 1.004f; // cracks sit above the wire
-
-        [Header("Selection Wireframe")]
-        [SerializeField] private Color selectableColor = new Color(1f, 1f, 1f, 0.85f);
-
-        [Tooltip("Shown when the aimed block is unbreakable or above the equipped tool tier.")]
-        [SerializeField] private Color blockedColor = new Color(1f, 0.35f, 0.3f, 0.9f);
-
-        [SerializeField] private float lineWidth = 0.02f;
+        private const float CrackInflation = 1.004f; // hair above the block surface — no z-fighting
 
         [Header("Break Cracks")]
         [Range(2, 8)]
@@ -41,10 +32,6 @@ namespace IslandGame.Terrain
         [SerializeField] private Color crackColor = new Color(0.03f, 0.03f, 0.03f, 0.85f);
 
         private PlayerBlockInteraction interaction;
-
-        private GameObject wireObject;
-        private LineRenderer wire;
-        private Material wireMaterial;
 
         private GameObject crackObject;
         private Mesh crackMesh;
@@ -59,18 +46,13 @@ namespace IslandGame.Terrain
 
         private void Start()
         {
-            BuildWireframe();
             BuildCrackOverlay();
         }
 
         private void OnDestroy()
         {
-            if (wireObject != null)
-                Destroy(wireObject);
             if (crackObject != null)
                 Destroy(crackObject);
-            if (wireMaterial != null)
-                Destroy(wireMaterial);
             if (crackMaterial != null)
                 Destroy(crackMaterial);
             if (crackMesh != null)
@@ -88,18 +70,6 @@ namespace IslandGame.Terrain
 
         private void LateUpdate()
         {
-            bool aimed = interaction.HasAimedBlock;
-            if (wireObject.activeSelf != aimed)
-                wireObject.SetActive(aimed);
-
-            if (aimed)
-            {
-                wireObject.transform.position = interaction.AimedCell + new Vector3(0.5f, 0.5f, 0.5f);
-                Color color = interaction.AimedBlockMinable ? selectableColor : blockedColor;
-                wire.startColor = color;
-                wire.endColor = color;
-            }
-
             bool showCracks = interaction.HasMiningTarget && interaction.MiningProgress01 > 0f;
             if (crackObject.activeSelf != showCracks)
                 crackObject.SetActive(showCracks);
@@ -116,48 +86,6 @@ namespace IslandGame.Terrain
                     crackMaterial.mainTexture = crackTextures[stage];
                 }
             }
-        }
-
-        // ------------------------------------------------------------------
-        // Wireframe
-        // ------------------------------------------------------------------
-
-        private void BuildWireframe()
-        {
-            wireObject = new GameObject("BlockSelectionWire");
-            wireObject.transform.rotation = Quaternion.identity;
-
-            wire = wireObject.AddComponent<LineRenderer>();
-            wire.useWorldSpace = false;
-            wire.loop = false;
-            wire.widthMultiplier = lineWidth;
-            wire.numCapVertices = 0;
-            wire.numCornerVertices = 0;
-            wire.shadowCastingMode = ShadowCastingMode.Off;
-            wire.receiveShadows = false;
-
-            // Sprites/Default: vertex-color friendly and renders fine under URP.
-            wireMaterial = new Material(Shader.Find("Sprites/Default"));
-            wire.material = wireMaterial;
-
-            // One polyline covering all 12 cube edges (some edges retraced).
-            float h = 0.5f * WireInflation;
-            Vector3[] c =
-            {
-                new Vector3(-h, -h, -h), new Vector3(h, -h, -h), new Vector3(h, -h, h), new Vector3(-h, -h, h),
-                new Vector3(-h, h, -h), new Vector3(h, h, -h), new Vector3(h, h, h), new Vector3(-h, h, h),
-            };
-            Vector3[] path =
-            {
-                c[0], c[1], c[2], c[3], c[0],       // bottom loop
-                c[4], c[5], c[1], c[5],             // up, top edge, drop to 1, back up
-                c[6], c[2], c[6],                   // top edge, drop to 2, back up
-                c[7], c[3], c[7], c[4],             // top edge, drop to 3, back, close top
-            };
-            wire.positionCount = path.Length;
-            wire.SetPositions(path);
-
-            wireObject.SetActive(false);
         }
 
         // ------------------------------------------------------------------

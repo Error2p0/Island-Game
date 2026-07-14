@@ -57,6 +57,16 @@ namespace IslandGame.Terrain
     /// a half-carved stone block still reads as THAT stone texture with a
     /// bite taken out. See SliceFaceUV for the per-face index math.
     ///
+    /// DETAIL LOD (organic-terrain phase): Build takes a `detail` flag. False
+    /// (far chunks) renders promoted cells as plain full blocks through the
+    /// ordinary base-face path — cheap quads, cheap collider cook — while all
+    /// NEIGHBOR reads stay data-driven, which is what keeps mixed-LOD seams
+    /// sealed: a simplified chunk's block face against a carved neighbor uses
+    /// the existing has-holes rule (full face drawn behind the detail), and a
+    /// detailed chunk's sub-faces near a simplified neighbor sit inside that
+    /// neighbor's full cube, harmlessly hidden. Chunk DATA never changes with
+    /// LOD — only what this class emits.
+    ///
     /// Single instance, reused per rebuild: all buffers are allocated once.
     /// </summary>
     public sealed class ChunkMesher
@@ -103,15 +113,21 @@ namespace IslandGame.Terrain
 
         private readonly Rect[] cellFaceRects = new Rect[6]; // per-promoted-cell scratch
         private bool promotionsNearby;
+        private bool detailPass;
 
         /// <summary>True when the last Build produced any collision geometry (empty meshes must not reach MeshCollider).</summary>
         public bool HasCollision => collisionTriangles.Count > 0;
 
-        /// <summary>Rebuilds both meshes in place from the chunk's current data.</summary>
+        /// <summary>
+        /// Rebuilds both meshes in place from the chunk's current data.
+        /// detail=false is the far-LOD build: this chunk's promoted cells emit
+        /// as plain full blocks (see DETAIL LOD in the class summary).
+        /// </summary>
         public void Build(
             Chunk chunk, VoxelWorld world, BlockPalette palette, BlockTextureAtlas atlas,
-            Mesh renderMesh, Mesh collisionMesh)
+            Mesh renderMesh, Mesh collisionMesh, bool detail = true)
         {
+            detailPass = detail;
             vertices.Clear();
             normals.Clear();
             uvs.Clear();
@@ -162,8 +178,10 @@ namespace IslandGame.Terrain
 
                         // Promoted cell: the detail pass replaces the base
                         // faces entirely (a big flat face would z-fight the
-                        // sub-voxel geometry underneath).
-                        if (promotionsNearby && chunk.TryGetSubVoxels(x, y, z, out SubVoxelGrid grid))
+                        // sub-voxel geometry underneath). In the far-LOD build
+                        // the cell falls through to the base path instead and
+                        // renders as a plain full block.
+                        if (detailPass && promotionsNearby && chunk.TryGetSubVoxels(x, y, z, out SubVoxelGrid grid))
                         {
                             EmitSubVoxelCell(
                                 chunk, world, palette, atlas, originX, originZ,

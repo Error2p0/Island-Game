@@ -71,6 +71,20 @@ namespace IslandGame.EditorTools
                 Debug.Log($"Added BlockTargetIndicator to '{playerReferences.name}'.", playerReferences);
             }
 
+            // Organic-terrain phase 3: sphere-of-effect mining highlight.
+            if (playerReferences.GetComponent<MiningRadiusIndicator>() == null)
+            {
+                Undo.AddComponent<MiningRadiusIndicator>(playerReferences.gameObject);
+                Debug.Log($"Added MiningRadiusIndicator to '{playerReferences.name}'.", playerReferences);
+            }
+
+            // Organic-terrain phase: F3 streaming/LOD performance readout.
+            if (world.GetComponent<TerrainPerfOverlay>() == null)
+            {
+                Undo.AddComponent<TerrainPerfOverlay>(world.gameObject);
+                Debug.Log($"Added TerrainPerfOverlay to '{world.name}' (toggle with F3 in Play mode).", world);
+            }
+
             EditorSceneManager.MarkSceneDirty(world.gameObject.scene);
             Selection.activeGameObject = world.gameObject;
             Debug.Log(

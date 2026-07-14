@@ -17,6 +17,9 @@ namespace IslandGame.Terrain
         public Mesh RenderMesh { get; private set; }
         public Mesh CollisionMesh { get; private set; }
 
+        /// <summary>Whether the last build was the full sub-voxel detail LOD — VoxelWorld rebuilds when the desired LOD flips.</summary>
+        public bool DetailBuilt { get; set; }
+
         public static ChunkView Create(Transform parent, Material opaqueMaterial, Material cutoutMaterial)
         {
             var gameObject = new GameObject("Chunk");

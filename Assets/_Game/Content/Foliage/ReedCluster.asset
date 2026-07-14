@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 96d39728f0c5dea468b368918eab9c11, type: 3}
+  m_Name: ReedCluster
+  m_EditorClassIdentifier: 
+  id: reed_cluster
+  displayName: Reeds
+  category: 0
+  prefab: {fileID: 3194859611686724213, guid: 513d51ba4544b724f97dd540ddadd55b, type: 3}
+  yieldItem: {fileID: 11400000, guid: ff020a0f9cf37db4687d4ffe7299c7f7, type: 2}
+  yieldCountMin: 2
+  yieldCountMax: 3
+  regrowHours: 8
+  depletedMaterial: {fileID: 2100000, guid: 2ec75d96c8023334d8b379c4886965e2, type: 2}
+  surface: 1
+  spawnWeight: 1

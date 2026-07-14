@@ -58,6 +58,7 @@ namespace IslandGame.EditorTools
                 ("Create example content (items/blocks)", ExampleContentCreator.Create),
                 ("Create world-gen content (sand/dirt/grass/water)", WorldGenContentCreator.Create),
                 ("Create tree content (wood/leaves blocks + templates)", ExampleTreeContentCreator.Create),
+                ("Create foliage content (bushes/reeds + items)", FoliageContentCreator.Create),
                 ("Create example recipes (+ Stone Pickaxe)", ExampleRecipeCreator.Create),
                 ("Create example building pieces", ExampleBuildingPieceCreator.Create),
                 ("Generate base content set", BaseContentSetGenerator.Run),
@@ -71,11 +72,13 @@ namespace IslandGame.EditorTools
                 ("Build creative menu UI", CreativeMenuUIBuilder.Build),
                 ("Create voxel world", VoxelWorldBuilder.Create),
                 ("Add structure system", StructureSystemBuilder.Create),
+                ("Add foliage system", FoliageSystemBuilder.Create),
                 ("Add building system to player", BuildingSystemBuilder.Create),
                 ("Add stats system to player", StatsSystemBuilder.Create),
                 ("Create day/night cycle", DayNightBuilder.Create),
                 ("Build crafting menu UI", CraftingMenuUIBuilder.Build),
                 ("Build stats HUD", StatsHudBuilder.Build),
+                ("Build interaction prompt HUD", InteractionHudBuilder.Build),
                 ("Create example creature spawners", CreatureContentCreator.CreateExampleSpawners),
                 ("Add save system", SaveSystemBuilder.Create),
                 ("Place player at spawn", PlacePlayerAtSpawn),
@@ -136,6 +139,7 @@ namespace IslandGame.EditorTools
             DeleteByName("CreativeMenuCanvas");
             DeleteByName("CraftingMenuCanvas");
             DeleteByName("StatsHudCanvas");
+            DeleteByName("InteractionPromptCanvas");
             DeleteByName("CreatureSpawners");
             DeleteByName("SaveSystem");
 
