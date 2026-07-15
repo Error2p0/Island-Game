@@ -143,7 +143,6 @@ namespace IslandGame.Terrain
 
         private BlockPalette palette;
         private readonly List<TreeTemplateDefinition> treeTemplates = new List<TreeTemplateDefinition>();
-        private float treeWeightTotal;
         private int treeScanMargin;
 
         // Organic-terrain phase: the shaper drives the sub-voxel pipeline at
@@ -199,7 +198,6 @@ namespace IslandGame.Terrain
         private void InitializeTrees(BlockPalette blockPalette)
         {
             treeTemplates.Clear();
-            treeWeightTotal = 0f;
             treeScanMargin = 0;
 
             if (treeDensity <= 0f)
@@ -224,7 +222,6 @@ namespace IslandGame.Terrain
                 }
 
                 treeTemplates.Add(template);
-                treeWeightTotal += template.SpawnWeight;
                 treeScanMargin = Mathf.Max(treeScanMargin, Mathf.CeilToInt(template.MaxHorizontalExtent) + 1);
             }
         }
@@ -347,7 +344,15 @@ namespace IslandGame.Terrain
                     if (surface <= seaLevel + beachBand)
                         continue;
 
-                    TreeTemplateDefinition template = PickTemplate(anchorX, anchorZ);
+                    // Variant pick is biome-aware since the foliage phase:
+                    // each template declares an altitude band (willows hug
+                    // the coast, dead trees claim the high ground) and the
+                    // weighted roll runs over the eligible set only. Altitude
+                    // is a pure function of (x,z), so determinism holds.
+                    TreeTemplateDefinition template = PickTemplate(anchorX, anchorZ, surface - seaLevel);
+                    if (template == null)
+                        continue; // no variant grows at this altitude
+
                     if (surface + template.MaxHeight >= Chunk.SizeY - 1)
                         continue; // too close to the world ceiling
 
@@ -391,17 +396,41 @@ namespace IslandGame.Terrain
             }
         }
 
-        private TreeTemplateDefinition PickTemplate(int anchorX, int anchorZ)
+        /// <summary>
+        /// Weighted pick among the templates whose altitude band accepts this
+        /// anchor's surface (foliage phase — templates without a band keep
+        /// the old everywhere behavior). The eligible weight total is summed
+        /// per anchor: the template list is a handful of entries, so two
+        /// passes cost less than any caching scheme would obscure. Null when
+        /// nothing grows at this altitude.
+        /// </summary>
+        private TreeTemplateDefinition PickTemplate(int anchorX, int anchorZ, int altitudeAboveSea)
         {
-            float roll = Hash01(anchorX, anchorZ, 104) * treeWeightTotal;
+            float eligibleWeightTotal = 0f;
             for (int i = 0; i < treeTemplates.Count; i++)
             {
-                roll -= treeTemplates[i].SpawnWeight;
-                if (roll <= 0f)
-                    return treeTemplates[i];
+                if (treeTemplates[i].IsEligibleAtAltitude(altitudeAboveSea))
+                    eligibleWeightTotal += treeTemplates[i].SpawnWeight;
             }
 
-            return treeTemplates[treeTemplates.Count - 1];
+            if (eligibleWeightTotal <= 0f)
+                return null;
+
+            float roll = Hash01(anchorX, anchorZ, 104) * eligibleWeightTotal;
+            TreeTemplateDefinition last = null;
+            for (int i = 0; i < treeTemplates.Count; i++)
+            {
+                TreeTemplateDefinition template = treeTemplates[i];
+                if (!template.IsEligibleAtAltitude(altitudeAboveSea))
+                    continue;
+
+                last = template;
+                roll -= template.SpawnWeight;
+                if (roll <= 0f)
+                    return template;
+            }
+
+            return last;
         }
 
         /// <summary>Deterministic seeded hash → [0,1). Same (seed, x, z, salt) always yields the same value on every machine.</summary>

@@ -152,6 +152,18 @@ namespace IslandGame.Building
             }
         }
 
+        /// <summary>
+        /// External extinguish (storm rain douses uncovered fires — weather
+        /// phase; future splash/water effects can reuse it). Fuel is kept —
+        /// the wood is wet, not gone — and the change flows through the same
+        /// SetLit path as every other transition, so LitChanged fires and the
+        /// visuals update normally. Relighting is the ordinary Interact.
+        /// </summary>
+        public void Extinguish()
+        {
+            SetLit(false);
+        }
+
         /// <summary>Save phase: the fire's whole runtime state is fuel + lit.</summary>
         public void GetSaveState(out float fuel, out bool lit)
         {

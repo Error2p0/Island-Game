@@ -42,6 +42,10 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 28e2cfc524c8bec48ba8a867c56ef273, type: 2}
   - {fileID: 11400000, guid: a20b9ec9da822d846afc87d7e5005468, type: 2}
   - {fileID: 11400000, guid: 871ebfbf0cc6e0f4a9d111cb3a541c4e, type: 2}
+  - {fileID: 11400000, guid: 3e79e1a955b03f74090e1ea3fef74958, type: 2}
+  - {fileID: 11400000, guid: ac79d9c778ef3fd4ca84b69a3b92f1b3, type: 2}
+  - {fileID: 11400000, guid: 7c47efada37632a4098d1731fbaaac3c, type: 2}
+  - {fileID: 11400000, guid: 636ad0314dda5fb4c83223a5ad477716, type: 2}
   maxDurability: 180
   durabilityPerMiningHit: 1
   durabilityPerAttackHit: 1

@@ -90,6 +90,31 @@ namespace IslandGame.Sky
         private Material previousSkybox;
         private AmbientMode previousAmbientMode;
 
+        // Weather attenuation (weather phase) — 0 = the pre-weather visuals,
+        // bit for bit. Set every frame by WeatherVisuals; nothing else writes.
+        private float weatherDarken01;
+        private float weatherFogBoost01;
+        private float weatherFlash01;
+
+        private static readonly Color OvercastDay = new Color(0.38f, 0.40f, 0.44f);
+        private static readonly Color OvercastNight = new Color(0.05f, 0.055f, 0.07f);
+        private static readonly Color LightningFlashColor = new Color(0.82f, 0.87f, 1f);
+
+        /// <summary>
+        /// The weather system's one write-hook into the sky (weather phase):
+        /// darken = overcast cloud cover (dims sun/sky/ambient, hides stars
+        /// and the sun disk), fogBoost = closes the fog in, flash = a
+        /// lightning frame lifting everything toward pale blue-white. All
+        /// applied INSIDE the existing smooth day/night math — one sky
+        /// system, weather is a modulation on it, never a second skybox.
+        /// </summary>
+        public void SetWeatherAtmosphere(float darken01, float fogBoost01, float flash01)
+        {
+            weatherDarken01 = Mathf.Clamp01(darken01);
+            weatherFogBoost01 = Mathf.Clamp01(fogBoost01);
+            weatherFlash01 = Mathf.Clamp01(flash01);
+        }
+
         private void Start()
         {
             if (timeOfDay == null)
@@ -151,16 +176,22 @@ namespace IslandGame.Sky
 
             var sunRotation = Quaternion.Euler(sunAngle, sunPathYaw, 0f);
 
+            // Weather modulation factors (all 0 outside rain/storm — every
+            // formula below then reduces to the original day/night math).
+            float darken = weatherDarken01;
+            float flash = weatherFlash01;
+            Color overcast = Color.Lerp(OvercastNight, OvercastDay, daylight);
+
             // --- Lights (one shadow caster at a time) ---------------------
             sunLight.transform.rotation = sunRotation;
-            sunLight.intensity = sunMaxIntensity * daylight;
+            sunLight.intensity = sunMaxIntensity * daylight * (1f - darken * 0.65f);
             sunLight.color = Color.Lerp(sunHorizonColor, sunDayColor, Mathf.Clamp01(elevation * 2.5f));
             sunLight.enabled = sunLight.intensity > 0.01f;
 
             if (moonLight != null)
             {
                 moonLight.transform.rotation = Quaternion.Euler(sunAngle + 180f, sunPathYaw, 0f);
-                moonLight.intensity = moonIntensity * moonFactor;
+                moonLight.intensity = moonIntensity * moonFactor * (1f - darken * 0.8f);
                 moonLight.color = moonColor;
                 moonLight.enabled = moonLight.intensity > 0.01f;
             }
@@ -170,6 +201,12 @@ namespace IslandGame.Sky
             Color horizon = Color.Lerp(nightHorizon, dayHorizon, daylight);
             zenith = Color.Lerp(zenith, duskZenith, horizonGlow * 0.6f);
             horizon = Color.Lerp(horizon, duskHorizon, horizonGlow);
+
+            // Cloud cover greys the sky out; lightning lifts it for a frame.
+            zenith = Color.Lerp(zenith, overcast * 0.85f, darken);
+            horizon = Color.Lerp(horizon, overcast, darken);
+            zenith = Color.Lerp(zenith, LightningFlashColor, flash * 0.7f);
+            horizon = Color.Lerp(horizon, LightningFlashColor, flash * 0.7f);
 
             runtimeSky.SetColor(TopColorId, zenith);
             runtimeSky.SetColor(HorizonColorId, horizon);
@@ -185,25 +222,37 @@ namespace IslandGame.Sky
                 ? Color.Lerp(sunHorizonColor, Color.white, Mathf.Clamp01(elevation * 2f)) * (0.6f + daylight)
                 : moonColor * 0.85f * moonFactor;
 
+            // Clouds swallow the sun/moon disk long before they black the sky.
             runtimeSky.SetVector(CelestialDirId, toBody);
-            runtimeSky.SetColor(CelestialColorId, diskColor);
+            runtimeSky.SetColor(CelestialColorId, diskColor * (1f - darken * 0.85f));
             runtimeSky.SetFloat(DiskSizeId, sunVisible ? 0.004f : 0.0022f);
-            runtimeSky.SetFloat(GlowStrengthId, sunVisible ? 0.5f + horizonGlow * 1.6f : 0.15f);
+            runtimeSky.SetFloat(GlowStrengthId, (sunVisible ? 0.5f + horizonGlow * 1.6f : 0.15f) * (1f - darken * 0.85f));
 
-            // --- Stars -------------------------------------------------------
+            // --- Stars (cloud cover hides them too) ---------------------------
             if (starField != null)
-                starField.SetFade(Mathf.InverseLerp(-0.02f, -0.14f, elevation));
+                starField.SetFade(Mathf.InverseLerp(-0.02f, -0.14f, elevation) * (1f - darken));
 
             // --- Ambient + fog ----------------------------------------------
-            RenderSettings.ambientSkyColor = Color.Lerp(nightAmbientSky, dayAmbientSky, daylight);
-            RenderSettings.ambientEquatorColor = Color.Lerp(
+            Color ambientSky = Color.Lerp(nightAmbientSky, dayAmbientSky, daylight);
+            Color ambientEquator = Color.Lerp(
                 Color.Lerp(nightAmbientEquator, dayAmbientEquator, daylight),
                 duskHorizon * 0.35f, horizonGlow * 0.5f);
-            RenderSettings.ambientGroundColor = Color.Lerp(nightAmbientGround, dayAmbientGround, daylight);
+            Color ambientGround = Color.Lerp(nightAmbientGround, dayAmbientGround, daylight);
 
+            ambientSky = Color.Lerp(ambientSky, overcast * 0.8f, darken * 0.7f);
+            ambientEquator = Color.Lerp(ambientEquator, overcast * 0.6f, darken * 0.7f);
+            ambientGround = Color.Lerp(ambientGround, overcast * 0.4f, darken * 0.7f);
+
+            RenderSettings.ambientSkyColor = Color.Lerp(ambientSky, LightningFlashColor, flash);
+            RenderSettings.ambientEquatorColor = Color.Lerp(ambientEquator, LightningFlashColor * 0.8f, flash);
+            RenderSettings.ambientGroundColor = Color.Lerp(ambientGround, LightningFlashColor * 0.5f, flash);
+
+            // Weather fog closes in on top of the day/night fog band (horizon
+            // is already weather-greyed above, so fog color follows for free).
+            float fogBoost = weatherFogBoost01;
             RenderSettings.fogColor = horizon;
-            RenderSettings.fogStartDistance = Mathf.Lerp(nightFogStart, dayFogStart, daylight);
-            RenderSettings.fogEndDistance = Mathf.Lerp(nightFogEnd, dayFogEnd, daylight);
+            RenderSettings.fogStartDistance = Mathf.Lerp(nightFogStart, dayFogStart, daylight) * (1f - fogBoost * 0.65f);
+            RenderSettings.fogEndDistance = Mathf.Lerp(nightFogEnd, dayFogEnd, daylight) * (1f - fogBoost * 0.5f);
         }
     }
 }

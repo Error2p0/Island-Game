@@ -62,6 +62,8 @@ namespace IslandGame.EditorTools
                 ("Create example recipes (+ Stone Pickaxe)", ExampleRecipeCreator.Create),
                 ("Create example building pieces", ExampleBuildingPieceCreator.Create),
                 ("Generate base content set", BaseContentSetGenerator.Run),
+                ("Create tree variant content (birch/willow/dead + rope)", TreeVariantContentCreator.Create),
+                ("Create death content (gravestone + penalty policy)", DeathContentCreator.Create),
                 ("Create player stat definitions", StatContentCreator.Create),
                 ("Create example creatures", CreatureContentCreator.Create),
                 ("Create example structures", StructureContentCreator.Create),
@@ -76,6 +78,8 @@ namespace IslandGame.EditorTools
                 ("Add building system to player", BuildingSystemBuilder.Create),
                 ("Add stats system to player", StatsSystemBuilder.Create),
                 ("Create day/night cycle", DayNightBuilder.Create),
+                ("Add weather system", WeatherBuilder.Create),
+                ("Add respawn system", RespawnSystemBuilder.Create),
                 ("Build crafting menu UI", CraftingMenuUIBuilder.Build),
                 ("Build stats HUD", StatsHudBuilder.Build),
                 ("Build interaction prompt HUD", InteractionHudBuilder.Build),
@@ -140,6 +144,7 @@ namespace IslandGame.EditorTools
             DeleteByName("CraftingMenuCanvas");
             DeleteByName("StatsHudCanvas");
             DeleteByName("InteractionPromptCanvas");
+            DeleteByName("DeathScreenCanvas");
             DeleteByName("CreatureSpawners");
             DeleteByName("SaveSystem");
 

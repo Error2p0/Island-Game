@@ -1,5 +1,6 @@
 using System;
 using IslandGame.Combat;
+using IslandGame.Data.Items;
 using IslandGame.Data.Stats;
 using IslandGame.Stats;
 using UnityEngine;
@@ -12,11 +13,12 @@ namespace IslandGame.Player
     /// StatContainer, and death is driven by the container's generic
     /// OnStatDepleted event — this class never tracks a health number itself.
     ///
-    /// DEATH: OnPlayerDeath fires exactly once per death (future death-penalty
-    /// and enemy-AI systems subscribe here), then the placeholder respawn
-    /// runs: teleport back to the recorded spawn point and refill every
-    /// Resource stat. A real respawn flow (death screen, penalties, bed
-    /// spawn points) is a future phase and replaces only Respawn().
+    /// DEATH: OnPlayerDeath fires exactly once per death. Since the respawn
+    /// phase, PlayerRespawnController subscribes and owns the real flow
+    /// (penalty, death screen, bed spawn points) — it sets
+    /// ExternalRespawnHandling so the legacy placeholder respawn below stays
+    /// dormant, and finishes through ExternalRespawnAt. Scenes without the
+    /// respawn system keep the old instant-respawn placeholder behavior.
     /// </summary>
     [DisallowMultipleComponent]
     [RequireComponent(typeof(PlayerReferences))]
@@ -34,6 +36,22 @@ namespace IslandGame.Player
 
         /// <summary>True from health depletion until the respawn completes.</summary>
         public bool IsDead => isDead;
+
+        /// <summary>
+        /// Set true by the respawn system when it takes ownership of the death
+        /// flow — the placeholder respawn then never runs. The OnPlayerDeath
+        /// event itself is unchanged either way.
+        /// </summary>
+        public bool ExternalRespawnHandling { get; set; }
+
+        /// <summary>Name of whatever last hurt the player through ApplyDamage ("Boar"), for cause-of-death text. Null before any hit.</summary>
+        public string LastDamageSourceName { get; private set; }
+
+        /// <summary>Damage type of the last ApplyDamage hit.</summary>
+        public DamageType LastDamageType { get; private set; }
+
+        /// <summary>Time.time of the last ApplyDamage hit; -inf before any. Stat-driven deaths (freezing) don't update it — check recency.</summary>
+        public float LastDamageTime { get; private set; } = float.NegativeInfinity;
 
         /// <summary>Fires once per death, before the placeholder respawn runs.</summary>
         public event Action OnPlayerDeath;
@@ -70,6 +88,12 @@ namespace IslandGame.Player
             if (isDead || damage.Amount <= 0f)
                 return;
 
+            // Recorded before the stat write so a lethal hit's cause is
+            // already in place when OnPlayerDeath fires.
+            LastDamageSourceName = damage.Source != null ? damage.Source.name : null;
+            LastDamageType = damage.Type;
+            LastDamageTime = Time.time;
+
             // Depletion (death) is handled by the OnStatDepleted subscription,
             // so damage application stays one line and one code path.
             statContainer.Modify(StatIds.Health, -damage.Amount);
@@ -92,28 +116,41 @@ namespace IslandGame.Player
             isDead = true;
             Debug.Log("[PlayerHealth] Player died.", this);
             OnPlayerDeath?.Invoke();
-            Respawn();
+
+            if (!ExternalRespawnHandling)
+                Respawn();
         }
 
         /// <summary>
-        /// Placeholder respawn: back to the spawn point with every Resource
-        /// stat refilled. CharacterController must be disabled across the
-        /// teleport or it overrides the transform write with its cached state.
+        /// Respawn-system API: safe teleport (CharacterController disabled
+        /// across the write or it overrides the transform with cached state),
+        /// clears the dead flag, fires OnPlayerRespawned. Post-respawn STAT
+        /// policy is deliberately the caller's job — this only moves and
+        /// revives.
         /// </summary>
-        private void Respawn()
+        public void ExternalRespawnAt(Vector3 position, Quaternion rotation)
         {
             CharacterController controller = references.Controller;
             bool hadController = controller != null && controller.enabled;
             if (hadController)
                 controller.enabled = false;
 
-            transform.SetPositionAndRotation(spawnPosition, spawnRotation);
+            transform.SetPositionAndRotation(position, rotation);
 
             if (hadController)
                 controller.enabled = true;
 
             if (references.Locomotion != null)
                 references.Locomotion.SetVerticalVelocity(0f);
+
+            isDead = false;
+            OnPlayerRespawned?.Invoke();
+        }
+
+        /// <summary>Placeholder respawn (scenes without the respawn system): spawn point + every Resource stat refilled.</summary>
+        private void Respawn()
+        {
+            ExternalRespawnAt(spawnPosition, spawnRotation);
 
             var statInstances = statContainer.Instances;
             for (int i = 0; i < statInstances.Count; i++)
@@ -122,9 +159,7 @@ namespace IslandGame.Player
                     statContainer.RefillToMax(statInstances[i].Definition.Id);
             }
 
-            isDead = false;
-            OnPlayerRespawned?.Invoke();
-            Debug.Log("[PlayerHealth] Respawned at spawn point with stats refilled.", this);
+            Debug.Log("[PlayerHealth] Placeholder respawn: spawn point, stats refilled.", this);
         }
     }
 }

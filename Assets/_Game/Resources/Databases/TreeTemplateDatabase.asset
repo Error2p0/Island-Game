@@ -13,5 +13,8 @@ MonoBehaviour:
   m_Name: TreeTemplateDatabase
   m_EditorClassIdentifier: 
   definitions:
+  - {fileID: 11400000, guid: b510452327d27af429f861b4734e472e, type: 2}
+  - {fileID: 11400000, guid: 191572b7b93692846b1e6bbcdf0de12e, type: 2}
   - {fileID: 11400000, guid: e1040ee69f04f9d4f8dcdd099a6ee4f9, type: 2}
   - {fileID: 11400000, guid: ae511fc25d84e68428a79f39a38a0908, type: 2}
+  - {fileID: 11400000, guid: 7ed35621b9d78794bb290bfa97b56911, type: 2}

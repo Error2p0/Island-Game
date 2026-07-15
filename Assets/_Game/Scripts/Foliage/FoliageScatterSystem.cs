@@ -307,6 +307,14 @@ namespace IslandGame.Foliage
             Transform plant = instance.transform;
             plant.SetPositionAndRotation(plan.position, Quaternion.Euler(0f, plan.yawDegrees, 0f));
             plant.localScale = Vector3.one * plan.scale;
+
+            // Weather phase: every scattered plant sways in the wind. Added
+            // here (not on the prefabs) so existing content participates;
+            // pooled instances keep the component. Must precede SetActive —
+            // the sway captures its base rotation in OnEnable.
+            if (instance.GetComponent<FoliageWindSway>() == null)
+                instance.AddComponent<FoliageWindSway>();
+
             instance.SetActive(true);
 
             var harvestable = instance.GetComponent<HarvestableFoliage>();

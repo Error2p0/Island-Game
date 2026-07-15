@@ -70,6 +70,15 @@ namespace IslandGame.Saving
         public int selectedHotbarIndex;
         public List<SavedItemSlot> inventory = new List<SavedItemSlot>();
         public List<SavedStat> stats = new List<SavedStat>();
+
+        // Death phase (additive with defaults, per the migration policy):
+        // the bed respawn point. false = world spawn, exactly the pre-death-
+        // phase behavior every old save deserializes to. The gravestone
+        // itself needs nothing here — it's an ordinary registered piece with
+        // a chest, already covered by SavedPiece.
+        public bool hasRespawnPoint;
+        public Vector3 respawnPosition;
+        public float respawnYaw;
     }
 
     /// <summary>One inventory slot: stable item ID (empty string = empty slot), count, and the Phase 2 durability value.</summary>

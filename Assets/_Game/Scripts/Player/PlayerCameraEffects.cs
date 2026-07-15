@@ -71,6 +71,20 @@ namespace IslandGame.Player
         private float dipVelocity;
         private bool wasGrounded = true;
         private float previousVerticalVelocity;
+        private Vector3 externalSway;
+
+        /// <summary>
+        /// Visual-only additive camera offset for environmental effects
+        /// (storm wind sway — weather phase). This component stays the ONLY
+        /// writer of the camera's local position; environment systems feed
+        /// their offset through here instead of fighting over the transform.
+        /// The owner sets it every frame (and zero when calm) — keep it tiny
+        /// (a couple of centimeters), it composes with bob and dip.
+        /// </summary>
+        public void SetExternalSway(Vector3 localOffset)
+        {
+            externalSway = localOffset;
+        }
 
         private void Awake()
         {
@@ -95,9 +109,9 @@ namespace IslandGame.Player
             UpdateFov(locomotion, deltaTime);
 
             cameraTransform.localPosition = new Vector3(
-                Mathf.Sin(bobPhase) * bobAmplitude * bobHorizontalFactor,
-                Mathf.Sin(bobPhase * 2f) * bobAmplitude + dipOffset,
-                0f);
+                Mathf.Sin(bobPhase) * bobAmplitude * bobHorizontalFactor + externalSway.x,
+                Mathf.Sin(bobPhase * 2f) * bobAmplitude + dipOffset + externalSway.y,
+                externalSway.z);
         }
 
         private void UpdateLandingDip(PlayerLocomotion locomotion, PlayerState state, float deltaTime)

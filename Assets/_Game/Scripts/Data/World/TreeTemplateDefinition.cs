@@ -96,6 +96,14 @@ namespace IslandGame.Data.World
         [Min(0f)]
         [SerializeField] private float spawnWeight = 1f;
 
+        [Tooltip("Biome band (foliage phase): the anchor's surface must sit at least this many blocks ABOVE SEA LEVEL. 0 = no lower bound. Grass is required regardless (the tree rule), so values below the beach band change nothing.")]
+        [Min(0)]
+        [SerializeField] private int minAltitudeAboveSea;
+
+        [Tooltip("Biome band (foliage phase): the anchor's surface must sit at most this many blocks above sea level. 0 = NO UPPER LIMIT (the project's 0-sentinel convention — existing templates deserialize to 0 and keep their everywhere behavior). Example: willow 3 hugs the coast; dead trees pair a high Min with 0 here.")]
+        [Min(0)]
+        [SerializeField] private int maxAltitudeAboveSea;
+
         [Header("Shape")]
         [SerializeField] private List<TreeStroke> strokes = new List<TreeStroke>();
 
@@ -105,6 +113,22 @@ namespace IslandGame.Data.World
         public BlockDefinition LeavesBlock => leavesBlock;
         public int Resolution => resolution;
         public float SpawnWeight => spawnWeight;
+
+        /// <summary>Minimum surface height above sea level to be eligible at an anchor. 0 = no lower bound.</summary>
+        public int MinAltitudeAboveSea => minAltitudeAboveSea;
+
+        /// <summary>Maximum surface height above sea level to be eligible at an anchor. 0 = no upper limit (the pre-foliage behavior every existing asset keeps).</summary>
+        public int MaxAltitudeAboveSea => maxAltitudeAboveSea;
+
+        /// <summary>The biome-band check the generator's variant pick runs per anchor (pure, so scattering stays a function of the seed).</summary>
+        public bool IsEligibleAtAltitude(int altitudeAboveSea)
+        {
+            if (altitudeAboveSea < minAltitudeAboveSea)
+                return false;
+
+            return maxAltitudeAboveSea <= 0 || altitudeAboveSea <= maxAltitudeAboveSea;
+        }
+
         public IReadOnlyList<TreeStroke> Strokes => strokes;
 
         /// <summary>Largest |x|/|z| any stroke reaches (including radius) — the generator's cross-chunk scan margin.</summary>

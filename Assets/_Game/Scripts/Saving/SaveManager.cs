@@ -195,6 +195,15 @@ namespace IslandGame.Saving
                     });
                 }
             }
+
+            // Death phase: the bed respawn point (additive fields).
+            var respawn = player.GetComponent<PlayerRespawnController>();
+            if (respawn != null && respawn.HasRespawnPoint)
+            {
+                data.hasRespawnPoint = true;
+                data.respawnPosition = respawn.RespawnPosition;
+                data.respawnYaw = respawn.RespawnYaw;
+            }
         }
 
         private static void WriteInventory(List<SavedItemSlot> output, InventorySystem inventory)
@@ -532,6 +541,15 @@ namespace IslandGame.Saving
             {
                 foreach (SavedStat stat in data.stats)
                     stats.SetCurrent(stat.statId, stat.current);
+            }
+
+            // Death phase: bed respawn point (default false = world spawn,
+            // so pre-death-phase saves behave exactly as before).
+            if (data.hasRespawnPoint)
+            {
+                var respawn = player.GetComponent<PlayerRespawnController>();
+                if (respawn != null)
+                    respawn.RestoreRespawnPoint(data.respawnPosition, data.respawnYaw);
             }
         }
 
