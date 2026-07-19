@@ -1,6 +1,8 @@
 using System;
+using System.Collections;
 using IslandGame.Combat;
 using IslandGame.Data.Building;
+using IslandGame.Terrain;
 using UnityEngine;
 
 namespace IslandGame.Building
@@ -29,9 +31,25 @@ namespace IslandGame.Building
         [Tooltip("Stable BuildingPieceDefinition ID this prefab belongs to. Stamped by the Building Piece Editor / example creator; used by scene-authored instances to self-resolve.")]
         [SerializeField] private string pieceId;
 
+        // Damage feedback tuning. The flash tint REPLACES the material color
+        // for its duration (property-block override), so it must read as a
+        // hit on any material color the piece uses.
+        private static readonly Color FlashColor = new Color(1f, 0.38f, 0.32f);
+        private static readonly int ColorId = Shader.PropertyToID("_Color");
+        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+        private const float FlashSeconds = 0.12f;
+        private const int HitDebrisCount = 8;
+        private const int DestroyDebrisCount = 24;
+
         private BuildingPieceDefinition definition;
         private float currentHealth;
         private bool initialized;
+
+        private MeshRenderer[] flashRenderers;
+        private MaterialPropertyBlock flashBlock;
+        private Coroutine flashRoutine;
+        private Color debrisColor;
+        private bool debrisColorCached;
 
         /// <summary>Raised right before the piece's GameObject is destroyed by damage. Phase 2's placement bookkeeping subscribes.</summary>
         public event Action<BuildingPiece> Destroyed;
@@ -130,12 +148,102 @@ namespace IslandGame.Building
                 return;
 
             currentHealth -= damage.Amount;
+            PlayHitFeedback(damage.Point);
             if (currentHealth > 0f)
                 return;
 
             currentHealth = 0f;
+
+            // Smashed pieces drop part of their build cost on the ground —
+            // the same cost math deconstruction uses, without an inventory
+            // (the attacker may be a creature, not the player).
+            BuildingRefund.Refund(this, null, BuildingRefund.DestroyedRatio);
+            MiningDebrisEffect.GetOrCreate().EmitBurst(
+                transform.position + Vector3.up * 0.5f, DebrisColor(), DestroyDebrisCount);
+
             Destroyed?.Invoke(this);
             Destroy(gameObject);
+        }
+
+        // ------------------------------------------------------------------
+        // Damage feedback: a chip burst at the hit point (the mining debris
+        // system, tinted with this piece's material color) plus a brief
+        // red flash over every renderer.
+        // ------------------------------------------------------------------
+
+        private void PlayHitFeedback(Vector3 hitPoint)
+        {
+            MiningDebrisEffect.GetOrCreate().EmitBurst(hitPoint, DebrisColor(), HitDebrisCount);
+
+            if (flashRenderers == null)
+                flashRenderers = GetComponentsInChildren<MeshRenderer>();
+            if (flashRenderers.Length == 0)
+                return;
+
+            if (flashBlock == null)
+            {
+                flashBlock = new MaterialPropertyBlock();
+                // Built-in Standard reads _Color, URP Lit reads _BaseColor —
+                // setting both covers whichever pipeline built the materials.
+                flashBlock.SetColor(ColorId, FlashColor);
+                flashBlock.SetColor(BaseColorId, FlashColor);
+            }
+
+            if (flashRoutine != null)
+                StopCoroutine(flashRoutine);
+            flashRoutine = StartCoroutine(FlashRoutine());
+        }
+
+        private IEnumerator FlashRoutine()
+        {
+            for (int i = 0; i < flashRenderers.Length; i++)
+            {
+                if (flashRenderers[i] != null)
+                    flashRenderers[i].SetPropertyBlock(flashBlock);
+            }
+
+            yield return new WaitForSeconds(FlashSeconds);
+
+            for (int i = 0; i < flashRenderers.Length; i++)
+            {
+                if (flashRenderers[i] != null)
+                    flashRenderers[i].SetPropertyBlock(null);
+            }
+
+            flashRoutine = null;
+        }
+
+        private Color DebrisColor()
+        {
+            if (debrisColorCached)
+                return debrisColor;
+
+            debrisColorCached = true;
+            debrisColor = new Color(0.55f, 0.45f, 0.35f); // splinter fallback
+
+            if (flashRenderers == null)
+                flashRenderers = GetComponentsInChildren<MeshRenderer>();
+
+            for (int i = 0; i < flashRenderers.Length; i++)
+            {
+                Material material = flashRenderers[i] != null ? flashRenderers[i].sharedMaterial : null;
+                if (material == null)
+                    continue;
+
+                if (material.HasProperty(ColorId))
+                {
+                    debrisColor = material.GetColor(ColorId);
+                    break;
+                }
+
+                if (material.HasProperty(BaseColorId))
+                {
+                    debrisColor = material.GetColor(BaseColorId);
+                    break;
+                }
+            }
+
+            return debrisColor;
         }
 
         private void InitFunctionalPlaceables()

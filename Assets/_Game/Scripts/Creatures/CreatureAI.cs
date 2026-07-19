@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using IslandGame.Building;
 using IslandGame.Combat;
 using IslandGame.Data.Creatures;
 using IslandGame.Data.Stats;
@@ -105,6 +106,7 @@ namespace IslandGame.Creatures
         private static HotbarSelector cachedSelector;
 
         private readonly RaycastHit[] sightBuffer = new RaycastHit[8];
+        private readonly RaycastHit[] strikeBuffer = new RaycastHit[8];
 
         /// <summary>Current state, exposed for debugging/gizmos and the combat phase's attack layer.</summary>
         public CreatureAIState State => state;
@@ -463,6 +465,16 @@ namespace IslandGame.Creatures
                 {
                     Vector3 hitPoint = targetPosition + Vector3.up * (creature.IsTamed ? 0.6f : 1.1f);
                     Vector3 direction = (targetPosition - transform.position).normalized;
+
+                    // A building piece standing in the strike line absorbs the
+                    // hit: creatures damage structures instead of biting their
+                    // target through a wall.
+                    if (TryGetBlockingPiece(hitPoint, damageable, out BuildingPiece blocker, out Vector3 blockPoint))
+                    {
+                        damageable = blocker;
+                        hitPoint = blockPoint;
+                    }
+
                     var info = new DamageInfo(
                         AttackDamage, Definition.AttackDamageType, hitPoint, direction, gameObject);
                     damageable.ApplyDamage(in info);
@@ -483,6 +495,52 @@ namespace IslandGame.Creatures
                 repositionUntil = Time.time + 0.7f;
                 EnterChase();
             }
+        }
+
+        /// <summary>
+        /// Nearest building piece crossing the strike line to the target, if
+        /// any — checked only at the moment a hit lands. The creature's own
+        /// colliders and the target's never count as blockers; any other
+        /// nearest obstacle that is NOT a piece leaves the hit unredirected
+        /// (exactly the pre-existing behavior, so terrain lips can't eat hits).
+        /// </summary>
+        private bool TryGetBlockingPiece(Vector3 hitPoint, IDamageable target, out BuildingPiece piece, out Vector3 point)
+        {
+            piece = null;
+            point = default;
+
+            Vector3 origin = transform.position + Vector3.up * 0.5f;
+            Vector3 toHit = hitPoint - origin;
+            float distance = toHit.magnitude;
+            if (distance < 0.001f)
+                return false;
+
+            Transform targetTransform = target is Component targetComponent ? targetComponent.transform : null;
+
+            int count = Physics.RaycastNonAlloc(
+                origin, toHit / distance, strikeBuffer, distance, ~0, QueryTriggerInteraction.Ignore);
+
+            int best = -1;
+            for (int i = 0; i < count; i++)
+            {
+                Transform hitTransform = strikeBuffer[i].collider.transform;
+                if (hitTransform.IsChildOf(transform))
+                    continue;
+                if (targetTransform != null && hitTransform.IsChildOf(targetTransform))
+                    continue;
+                if (best < 0 || strikeBuffer[i].distance < strikeBuffer[best].distance)
+                    best = i;
+            }
+
+            if (best < 0)
+                return false;
+
+            piece = strikeBuffer[best].collider.GetComponentInParent<BuildingPiece>();
+            if (piece == null)
+                return false;
+
+            point = strikeBuffer[best].point;
+            return true;
         }
 
         /// <summary>

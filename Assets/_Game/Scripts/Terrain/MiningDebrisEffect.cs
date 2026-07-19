@@ -45,13 +45,19 @@ namespace IslandGame.Terrain
         /// <summary>Bursts chip particles of the given block's color at a world position.</summary>
         public void EmitBurst(Vector3 position, BlockDefinition block, int count)
         {
+            EmitBurst(position, GetBlockColor(block), count);
+        }
+
+        /// <summary>Bursts chip particles of an explicit color — building pieces and other non-block destructibles share the effect.</summary>
+        public void EmitBurst(Vector3 position, Color color, int count)
+        {
             EnsureSystem();
 
             var emitParams = new ParticleSystem.EmitParams
             {
                 position = position,
                 applyShapeToPosition = true,
-                startColor = GetBlockColor(block),
+                startColor = color,
             };
             system.Emit(emitParams, count);
         }
