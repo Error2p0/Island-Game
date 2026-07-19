@@ -46,9 +46,16 @@ namespace IslandGame.Building
     ///   legal (foundations sink into uneven ground — the reference games'
     ///   behavior); anything else (placed pieces, the player, props) blocks.
     ///   Since the organic-terrain phase, FREE placement additionally requires
-    ///   ground support: footprint probes against the real (sub-voxel) surface
-    ///   must all find terrain/pieces below, within a slope tolerance — see
-    ///   HasGroundSupport. Snapped placements are exempt (sockets = support).
+    ///   ground support, now measured as AREA COVERAGE over sub-voxel
+    ///   occupancy: the footprint's bottom is sampled on a 0.25 m grid
+    ///   against the voxel DATA (partially shaved/carved surfaces count
+    ///   exactly as much material as remains), at least Min Ground Coverage
+    ///   (default 75%) of the samples must find support within Ground Probe
+    ///   Depth, and their height spread must stay within Max Ground
+    ///   Unevenness — see HasGroundSupport. A grounded free piece is then
+    ///   SEATED: its base rests on the mean supported height, hugging the
+    ///   real surface instead of the 0.25 m Y grid line. Snapped placements
+    ///   are exempt (sockets = support).
     ///
     ///   CONFIRM — place button instantiates the real prefab under the
     ///   registry and calls BuildingPiece.Initialize (registry registration +
@@ -104,8 +111,12 @@ namespace IslandGame.Building
         [SerializeField] private float overlapSkin = 0.05f;
 
         [Header("Ground (Free Placement)")]
-        [Tooltip("Every footprint probe of a FREE-placed piece must find support (voxel terrain or a placed piece) within this many meters below the piece base. Snapped pieces skip the check — their support comes through the socket.")]
+        [Tooltip("Every footprint sample of a FREE-placed piece looks for support (sub-voxel terrain occupancy or a placed piece) within this many meters below the piece base. Snapped pieces skip the check — their support comes through the socket.")]
         [SerializeField] private float groundProbeDepth = 2f;
+
+        [Tooltip("Fraction of the footprint's bottom area that must find support directly beneath it. Sub-voxel accurate: partially shaved/carved surfaces count exactly as much as remains.")]
+        [Range(0.1f, 1f)]
+        [SerializeField] private float minGroundCoverage = 0.75f;
 
         [Tooltip("Maximum height difference between the footprint's ground probes, meters. Organic terrain slopes — beyond this the ground is too steep/uneven to build on unprepared; mine it flat first, like the reference games.")]
         [SerializeField] private float maxGroundUnevenness = 0.75f;
@@ -117,6 +128,7 @@ namespace IslandGame.Building
         private HotbarSelector selector;
         private CraftingSystem craftingSystem;
         private InventorySystem inventory;
+        private VoxelWorld voxelWorld;
         private BuildingGhost ghost;
 
         private readonly RaycastHit[] rayBuffer = new RaycastHit[16];
@@ -173,6 +185,7 @@ namespace IslandGame.Building
             selector = GetComponent<HotbarSelector>();
             craftingSystem = GetComponent<CraftingSystem>();
             inventory = GetComponent<InventorySystem>();
+            voxelWorld = FindFirstObjectByType<VoxelWorld>();
             ghost = new BuildingGhost(validGhostColor, invalidGhostColor);
         }
 
@@ -250,8 +263,19 @@ namespace IslandGame.Building
                 ghostRotation = desiredRotation;
             }
 
-            poseValid = !HasBlockingOverlap(piece.Prefab, ghostPosition, ghostRotation)
-                        && (poseSnapped || HasGroundSupport(piece.Prefab, ghostPosition, ghostRotation));
+            bool grounded = true;
+            if (!poseSnapped)
+            {
+                grounded = HasGroundSupport(piece.Prefab, ghostPosition, ghostRotation, out float seatedY);
+                // Seat the footprint base on the real (mean) support height —
+                // free pieces rest against the actual sub-voxel surface
+                // instead of the 0.25 m grid line, which floats over shaved
+                // ground and buries into mounds.
+                if (grounded)
+                    ghostPosition.y = seatedY;
+            }
+
+            poseValid = grounded && !HasBlockingOverlap(piece.Prefab, ghostPosition, ghostRotation);
             RefreshCost(piece);
             hasPose = true;
 
@@ -531,24 +555,30 @@ namespace IslandGame.Building
         // Ground support (organic-terrain phase)
         // ------------------------------------------------------------------
 
-        // Probe corners sit at half the footprint extents so a piece may hang
-        // slightly over a ledge without rejecting — the reference games allow
-        // modest overhang as long as the body of the piece is grounded.
-        private const float GroundProbeInset = 0.5f;
         private const float GroundProbeStartAbove = 0.5f;
+        private const float SupportSampleSpacing = 0.25f;
 
         /// <summary>
-        /// Free placement must rest on real ground: five probes across the
-        /// piece footprint (center + inset corners at its base height) each
-        /// raycast down and must find voxel terrain or a placed piece within
-        /// Ground Probe Depth, and the spread between the highest and lowest
-        /// support must stay within Max Ground Unevenness. Terrain is now
-        /// organically sloped and the probes hit the ACTUAL sub-voxel carved
-        /// collision, so this is the real surface, not the block grid. Snapped
-        /// pieces never get here — sockets carry their support.
+        /// Free placement must rest on real ground: the footprint's bottom
+        /// area is sampled on a SupportSampleSpacing grid and every sample
+        /// column asks for solid support directly beneath — SUB-VOXEL
+        /// occupancy through the world DATA (a shaved or partially carved
+        /// surface counts exactly as much as remains, where the old five-ray
+        /// version assumed whatever the probe happened to hit spoke for the
+        /// whole footprint), with a per-sample physics fallback so placed
+        /// pieces still carry (a campfire on a foundation). Valid when at
+        /// least Min Ground Coverage of the samples find support within
+        /// Ground Probe Depth AND the spread between their heights stays
+        /// within Max Ground Unevenness — the coverage threshold also
+        /// replaces the old inset-corner overhang allowance. seatedPositionY
+        /// returns the pose Y that rests the footprint base on the MEAN
+        /// supported height. Snapped pieces never get here — sockets carry
+        /// their support.
         /// </summary>
-        private bool HasGroundSupport(GameObject prefab, Vector3 position, Quaternion rotation)
+        private bool HasGroundSupport(GameObject prefab, Vector3 position, Quaternion rotation, out float seatedPositionY)
         {
+            seatedPositionY = position.y;
+
             List<OverlapShape> shapes = GetOverlapShapes(prefab);
             if (shapes.Count == 0)
                 return true; // no volume — nothing that could float or bury
@@ -570,51 +600,91 @@ namespace IslandGame.Building
             }
 
             float baseY = bounds.min.y;
-            Vector3 center = bounds.center;
-            float insetX = bounds.extents.x * GroundProbeInset;
-            float insetZ = bounds.extents.z * GroundProbeInset;
+            int countX = Mathf.Max(2, Mathf.CeilToInt(bounds.size.x / SupportSampleSpacing) + 1);
+            int countZ = Mathf.Max(2, Mathf.CeilToInt(bounds.size.z / SupportSampleSpacing) + 1);
 
+            // Physics rays only matter where a placed piece could be the
+            // support (its surface sits ABOVE any terrain beneath it) — one
+            // registry scan gates them so open-ground placement costs zero
+            // raycasts.
+            PlacedPieceRegistry registry = PlacedPieceRegistry.Instance;
+            bool piecesNearby = registry != null
+                && registry.CollectNear(position, bounds.extents.magnitude + pieceSearchRadius, nearbyPieces) > 0;
+
+            int total = 0;
+            int supported = 0;
             float highest = float.MinValue;
             float lowest = float.MaxValue;
-            for (int i = 0; i < 5; i++)
+            float heightSum = 0f;
+
+            for (int ix = 0; ix < countX; ix++)
             {
-                var probeLocal = new Vector3(
-                    i == 0 ? center.x : (i & 1) == 0 ? center.x - insetX : center.x + insetX,
-                    baseY,
-                    i == 0 ? center.z : (i & 2) == 0 ? center.z - insetZ : center.z + insetZ);
+                float localX = Mathf.Lerp(bounds.min.x, bounds.max.x, ix / (float)(countX - 1));
+                for (int iz = 0; iz < countZ; iz++)
+                {
+                    float localZ = Mathf.Lerp(bounds.min.z, bounds.max.z, iz / (float)(countZ - 1));
+                    Vector3 samplePoint = position + rotation * new Vector3(localX, baseY, localZ);
+                    total++;
 
-                if (!ProbeGround(position + rotation * probeLocal, out float supportY))
-                    return false; // a footprint corner hangs over nothing
+                    if (!TryGetSupport(samplePoint, piecesNearby, out float supportY))
+                        continue;
 
-                if (supportY > highest)
-                    highest = supportY;
-                if (supportY < lowest)
-                    lowest = supportY;
+                    supported++;
+                    heightSum += supportY;
+                    if (supportY > highest)
+                        highest = supportY;
+                    if (supportY < lowest)
+                        lowest = supportY;
+                }
             }
 
-            return highest - lowest <= maxGroundUnevenness;
+            if (supported < total * minGroundCoverage)
+                return false;
+
+            if (highest - lowest > maxGroundUnevenness)
+                return false;
+
+            seatedPositionY = heightSum / supported - baseY;
+            return true;
         }
 
-        /// <summary>One downward support probe: the topmost terrain/piece surface below the point, if any is in range.</summary>
-        private bool ProbeGround(Vector3 point, out float supportY)
+        /// <summary>
+        /// One sample column: the voxel DATA (sub-cell accurate, free) and —
+        /// only when pieces are nearby or the data found nothing — a physics
+        /// ray so placed pieces count too; the HIGHER of the two wins, since
+        /// a piece surface always sits above whatever terrain lies under it.
+        /// The ray also accepts ChunkView as a safety net for scenes without
+        /// a VoxelWorld. Loose props, items, creatures and the player never
+        /// hold a house up.
+        /// </summary>
+        private bool TryGetSupport(Vector3 point, bool piecesNearby, out float supportY)
         {
             supportY = float.MinValue;
+
+            bool haveData = false;
+            if (voxelWorld != null && voxelWorld.TryGetSupportHeight(
+                    point.x, point.z, point.y + GroundProbeStartAbove, point.y - groundProbeDepth, out float dataY))
+            {
+                supportY = dataY;
+                haveData = true;
+                if (!piecesNearby)
+                    return true;
+            }
+
             Vector3 origin = point + Vector3.up * GroundProbeStartAbove;
             int count = Physics.RaycastNonAlloc(
                 origin, Vector3.down, rayBuffer, GroundProbeStartAbove + groundProbeDepth,
                 ~0, QueryTriggerInteraction.Ignore);
 
-            bool found = false;
+            bool found = haveData;
             for (int i = 0; i < count; i++)
             {
                 RaycastHit hit = rayBuffer[i];
                 if (hit.collider == null)
                     continue;
 
-                // Support = the voxel world or an existing structure. Loose
-                // props, items, creatures and the player do NOT hold a house up.
-                if (hit.collider.GetComponentInParent<ChunkView>() == null
-                    && hit.collider.GetComponentInParent<BuildingPiece>() == null)
+                if (hit.collider.GetComponentInParent<BuildingPiece>() == null
+                    && hit.collider.GetComponentInParent<ChunkView>() == null)
                     continue;
 
                 if (hit.point.y > supportY)

@@ -36,3 +36,4 @@ MonoBehaviour:
   holdLocalPosition: {x: 0, y: 0, z: 0}
   holdLocalRotationEuler: {x: 0, y: 0, z: 0}
   placedBlock: {fileID: 11400000, guid: 2f176694c5ffaa84d81a8e82d083e203, type: 2}
+  placeRadius: 0.75

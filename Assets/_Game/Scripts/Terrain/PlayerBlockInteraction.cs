@@ -54,6 +54,16 @@ namespace IslandGame.Terrain
     /// with a PlacedBlock, the block goes into the cell on the aimed face —
     /// unless that cell is occupied or overlaps the player — and one unit is
     /// consumed from the equipped stack.
+    ///
+    /// RADIUS PLACEMENT: a block item with PlaceRadius > 0 instead FILLS a
+    /// sub-voxel sphere at the hit point (biased a quarter-radius OUT of the
+    /// surface — CarveCenter's mirror) through VoxelWorld.FillSphere: air and
+    /// liquid cells fill, same-id partials top up (demoting back to plain
+    /// blocks at 100%), other solids are untouched, and cells overlapping the
+    /// player's capsule are skipped. COST is 1 item per full block volume
+    /// actually added, rounded up, all-or-nothing — the mirror of mining's
+    /// one-block-volume = one-drop economy. MiningRadiusIndicator previews
+    /// the identical fill query.
     /// </summary>
     [DisallowMultipleComponent]
     [RequireComponent(typeof(PlayerReferences))]
@@ -340,6 +350,22 @@ namespace IslandGame.Terrain
             if (!RaycastVoxels(out RaycastHit hit))
                 return;
 
+            ushort placedId = world.Palette.GetId(equipped.PlacedBlock);
+            if (placedId == BlockPalette.AirId)
+                return;
+
+            // RADIUS PLACEMENT (the fill mirror of radius mining): a block
+            // item with PlaceRadius > 0 fills a sub-voxel sphere at the hit
+            // point instead of one cell. COST: 1 item per full block volume
+            // of material actually added, rounded up — the mirror of mining's
+            // one-block-volume = one-drop economy — and all-or-nothing: the
+            // whole previewed fill must be affordable or nothing places.
+            if (equipped.PlaceRadius > 0f)
+            {
+                TryRadiusPlace(equipped, placedId, hit);
+                return;
+            }
+
             // Step slightly OUT of the face (see FaceStepIn in UpdateAim):
             // grid-aligned faces land in the adjacent cell exactly as before,
             // while an interior sub-voxel face (carved crater wall) lands in
@@ -365,12 +391,35 @@ namespace IslandGame.Terrain
             if (equipped.PlacedBlock.IsSolid && references.Controller.bounds.Intersects(cellBounds))
                 return;
 
-            ushort blockId = world.Palette.GetId(equipped.PlacedBlock);
-            if (blockId == BlockPalette.AirId)
+            if (world.SetBlock(cell, placedId))
+                inventory.ConsumeFromSlot(selector.SelectedIndex, 1);
+        }
+
+        /// <summary>
+        /// One radius placement: price the previewed fill, place only when
+        /// the whole volume is affordable, then consume for what was actually
+        /// added. Center bias, eligibility and the player-capsule exclusion
+        /// all live in VoxelWorld's fill pair — identical to what the
+        /// indicator previews.
+        /// </summary>
+        private void TryRadiusPlace(ItemDefinition equipped, ushort placedId, in RaycastHit hit)
+        {
+            float radius = equipped.PlaceRadius;
+            Vector3 center = VoxelWorld.FillSphereCenter(hit.point, hit.normal, radius);
+            Bounds? exclude = equipped.PlacedBlock.IsSolid ? references.Controller.bounds : (Bounds?)null;
+
+            int prospective = world.CollectFillPreview(center, radius, placedId, exclude, null);
+            if (prospective == 0)
                 return;
 
-            if (world.SetBlock(cell, blockId))
-                inventory.ConsumeFromSlot(selector.SelectedIndex, 1);
+            int perBlock = world.SubVoxelResolution * world.SubVoxelResolution * world.SubVoxelResolution;
+            int cost = (prospective + perBlock - 1) / perBlock;
+            if (inventory == null || inventory.GetItemCount(equipped) < cost)
+                return;
+
+            int filled = world.FillSphere(center, radius, placedId, exclude);
+            if (filled > 0)
+                inventory.RemoveItem(equipped, (filled + perBlock - 1) / perBlock);
         }
 
         // ------------------------------------------------------------------

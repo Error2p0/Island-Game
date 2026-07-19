@@ -5,10 +5,14 @@ using UnityEngine.Rendering;
 namespace IslandGame.Terrain
 {
     /// <summary>
-    /// BREAK-PROGRESS feedback for block interaction, driven entirely by
+    /// BREAK-PROGRESS feedback for CLASSIC whole-block mining, driven by
     /// PlayerBlockInteraction's mining state: a crack overlay on the mined
     /// block stepping through procedurally generated stages (cumulative
     /// cracks) as MiningProgress01 advances — the hook reserved in Phase 6.
+    /// RADIUS profiles never show the cube: their bite is a sub-voxel sphere,
+    /// so a full-block crack cube would paint faces the bite never touches —
+    /// their progress renders on the bite shape itself (MiningRadiusIndicator
+    /// deepens the overlay tint with the same MiningProgress01).
     ///
     /// The SELECTION wireframe this component used to draw was removed in the
     /// organic-terrain phase: MiningRadiusIndicator now shows the true
@@ -70,7 +74,9 @@ namespace IslandGame.Terrain
 
         private void LateUpdate()
         {
-            bool showCracks = interaction.HasMiningTarget && interaction.MiningProgress01 > 0f;
+            bool showCracks = interaction.HasMiningTarget
+                              && interaction.MiningProgress01 > 0f
+                              && interaction.ActiveProfile.Radius <= 0f;
             if (crackObject.activeSelf != showCracks)
                 crackObject.SetActive(showCracks);
 

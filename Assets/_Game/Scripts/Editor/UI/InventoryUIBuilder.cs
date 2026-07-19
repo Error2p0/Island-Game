@@ -105,19 +105,29 @@ namespace IslandGame.EditorTools
             GameObject gridTemplate = BuildSlotTemplate(grid);
 
             // --- Tooltip --------------------------------------------------
+            // Fixed width, height driven by content: a VerticalLayoutGroup
+            // stacks name over body and a ContentSizeFitter grows the panel to
+            // fit both — manual child rects overlapped as soon as text lengths
+            // varied, so the layout group owns ALL child positioning.
             RectTransform tooltipRect = CreateRect("Tooltip", canvasObject.transform);
             tooltipRect.pivot = new Vector2(0f, 1f);
-            tooltipRect.sizeDelta = new Vector2(280f, 120f);
+            tooltipRect.sizeDelta = new Vector2(280f, 0f);
             tooltipRect.gameObject.AddComponent<Image>().color = TooltipColor;
             tooltipRect.gameObject.AddComponent<CanvasGroup>().blocksRaycasts = false;
+            var tooltipLayout = tooltipRect.gameObject.AddComponent<VerticalLayoutGroup>();
+            tooltipLayout.padding = new RectOffset(10, 10, 8, 8);
+            tooltipLayout.spacing = 4f;
+            tooltipLayout.childControlWidth = true;
+            tooltipLayout.childControlHeight = true;
+            tooltipLayout.childForceExpandWidth = true;
+            tooltipLayout.childForceExpandHeight = false;
+            var tooltipFitter = tooltipRect.gameObject.AddComponent<ContentSizeFitter>();
+            tooltipFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             var tooltip = tooltipRect.gameObject.AddComponent<InventoryTooltip>();
 
             Text tooltipName = CreateText(tooltipRect, "Name", "Item", 18, TextAnchor.UpperLeft, FontStyle.Bold);
-            Stretch(tooltipName.rectTransform, 10f, 10f, 10f, 34f);
-            tooltipName.rectTransform.offsetMax = new Vector2(-10f, -8f);
-
             Text tooltipBody = CreateText(tooltipRect, "Body", "Description", 14, TextAnchor.UpperLeft, FontStyle.Normal);
-            Stretch(tooltipBody.rectTransform, 10f, 10f, 34f, 8f);
+            tooltipBody.color = new Color(1f, 1f, 1f, 0.8f);
 
             // --- Drag ghost ----------------------------------------------
             RectTransform ghost = CreateRect("DragGhost", canvasObject.transform);

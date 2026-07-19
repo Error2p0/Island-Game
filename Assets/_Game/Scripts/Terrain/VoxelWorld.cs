@@ -692,6 +692,341 @@ namespace IslandGame.Terrain
             return added;
         }
 
+        /// <summary>
+        /// Building-support column query (sub-cell accurate): finds the top of
+        /// the first solid material in the column at (x, z), scanning DOWN
+        /// from topY to bottomY through the DATA — full blocks and promoted
+        /// grids alike, so shaved or carved surfaces report exactly the height
+        /// of what actually remains. Liquids and non-solid decoration are
+        /// never support. The reported height is clamped to topY (material
+        /// above the scan window belongs to a different question).
+        /// </summary>
+        public bool TryGetSupportHeight(float x, float z, float topY, float bottomY, out float supportY)
+        {
+            supportY = 0f;
+
+            int cellX = Mathf.FloorToInt(x);
+            int cellZ = Mathf.FloorToInt(z);
+            var coord = new Vector2Int(cellX >> Chunk.Shift, cellZ >> Chunk.Shift);
+            if (!chunks.TryGetValue(coord, out Chunk chunk))
+                return false;
+
+            int localX = cellX & Chunk.Mask;
+            int localZ = cellZ & Chunk.Mask;
+            int startY = Mathf.Clamp(Mathf.FloorToInt(topY), 0, Chunk.SizeY - 1);
+            int endY = Mathf.Clamp(Mathf.FloorToInt(bottomY), 0, startY);
+
+            for (int cy = startY; cy >= endY; cy--)
+            {
+                ushort id = chunk.Get(localX, cy, localZ);
+                if (id == BlockPalette.AirId)
+                    continue;
+
+                BlockDefinition definition = palette.GetDefinition(id);
+                if (definition == null || !definition.IsSolid
+                    || definition.HasBehavior(BlockBehaviorFlags.Liquid))
+                    continue;
+
+                if (!chunk.TryGetSubVoxels(localX, cy, localZ, out SubVoxelGrid grid))
+                {
+                    supportY = Mathf.Min(cy + 1f, topY);
+                    return true;
+                }
+
+                int res = grid.Resolution;
+                int sx = Mathf.Clamp((int)((x - cellX) * res), 0, res - 1);
+                int sz = Mathf.Clamp((int)((z - cellZ) * res), 0, res - 1);
+                for (int sy = res - 1; sy >= 0; sy--)
+                {
+                    if (!grid.Get(sx, sy, sz))
+                        continue;
+
+                    supportY = Mathf.Min(cy + (sy + 1f) / res, topY);
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Fill-sphere center for a surface hit: biased a quarter-radius OUT
+        /// of the face so mounds sit on the surface — CarveCenter's mirror.
+        /// Action and preview share it so they can never drift.
+        /// </summary>
+        public static Vector3 FillSphereCenter(Vector3 hitPoint, Vector3 hitNormal, float radius)
+        {
+            return hitPoint + hitNormal * (radius * 0.25f);
+        }
+
+        /// <summary>
+        /// Radius placement — CarveSphere's mirror (promote-then-FILL): every
+        /// sub-cell CENTER inside the sphere fills with blockId. Eligible
+        /// cells: AIR and LIQUID (replaced wholesale, the same rule
+        /// single-block placement uses — water is static volume data, so a
+        /// partially-covered water cell keeps only the filled sub-cells), and
+        /// promoted partials of the SAME block id, whose grids gain their
+        /// in-sphere sub-cells (refilled to 100% ⇒ the grid demotes back to a
+        /// plain full block, mirroring carve's demote-to-air; fully-covered
+        /// air/liquid cells are likewise written as plain full blocks, never
+        /// promoted). Solid cells of another id are never overwritten. Cells
+        /// whose bounds intersect excludeBounds are skipped entirely (the
+        /// caller's player-capsule rule). Returns the number of sub-cells of
+        /// material actually added.
+        /// </summary>
+        public int FillSphere(Vector3 worldCenter, float radius, ushort blockId, Bounds? excludeBounds)
+        {
+            if (radius <= 0f || blockId == BlockPalette.AirId)
+                return 0;
+
+            carveDirtyChunks.Clear();
+            float radiusSqr = radius * radius;
+            int filledTotal = 0;
+
+            int minX = Mathf.FloorToInt(worldCenter.x - radius);
+            int maxX = Mathf.FloorToInt(worldCenter.x + radius);
+            int minY = Mathf.Max(0, Mathf.FloorToInt(worldCenter.y - radius));
+            int maxY = Mathf.Min(Chunk.SizeY - 1, Mathf.FloorToInt(worldCenter.y + radius));
+            int minZ = Mathf.FloorToInt(worldCenter.z - radius);
+            int maxZ = Mathf.FloorToInt(worldCenter.z + radius);
+
+            for (int cy = minY; cy <= maxY; cy++)
+            {
+                for (int cz = minZ; cz <= maxZ; cz++)
+                {
+                    for (int cx = minX; cx <= maxX; cx++)
+                    {
+                        var coord = new Vector2Int(cx >> Chunk.Shift, cz >> Chunk.Shift);
+                        if (!chunks.TryGetValue(coord, out Chunk chunk))
+                            continue;
+
+                        // Sphere vs cell AABB quick reject — same as CarveSphere.
+                        float dx = worldCenter.x - Mathf.Clamp(worldCenter.x, cx, cx + 1f);
+                        float dy = worldCenter.y - Mathf.Clamp(worldCenter.y, cy, cy + 1f);
+                        float dz = worldCenter.z - Mathf.Clamp(worldCenter.z, cz, cz + 1f);
+                        if (dx * dx + dy * dy + dz * dz > radiusSqr)
+                            continue;
+
+                        var cell = new Vector3Int(cx, cy, cz);
+                        if (!FillEligible(chunk, cell, blockId, excludeBounds, out SubVoxelGrid partialGrid))
+                            continue;
+
+                        int added = FillCell(chunk, coord, cell, blockId, partialGrid, worldCenter, radiusSqr);
+                        filledTotal += added;
+                    }
+                }
+            }
+
+            foreach (Vector2Int coord in carveDirtyChunks)
+                RebuildIfMeshed(coord);
+
+            if (filledTotal > 0)
+                TerrainVersion++;
+
+            return filledTotal;
+        }
+
+        /// <summary>
+        /// Read-only twin of FillSphere for the placement preview — the fill
+        /// counterpart of CollectCarvePreview: visits every sub-cell CENTER
+        /// inside the sphere that WOULD gain material (eligible cell, sub-cell
+        /// currently empty). Never promotes or mutates anything. Output (when
+        /// a list is given) uses the same global sub-cell lattice convention;
+        /// the count also prices the fill: 1 item per full block volume,
+        /// rounded up. Returns the number of sub-cells that would fill.
+        /// </summary>
+        public int CollectFillPreview(
+            Vector3 worldCenter, float radius, ushort blockId, Bounds? excludeBounds, List<Vector3Int> subCells)
+        {
+            if (radius <= 0f || blockId == BlockPalette.AirId)
+                return 0;
+
+            float radiusSqr = radius * radius;
+            int res = subVoxelResolution;
+            float subSize = 1f / res;
+            int added = 0;
+
+            int minX = Mathf.FloorToInt(worldCenter.x - radius);
+            int maxX = Mathf.FloorToInt(worldCenter.x + radius);
+            int minY = Mathf.Max(0, Mathf.FloorToInt(worldCenter.y - radius));
+            int maxY = Mathf.Min(Chunk.SizeY - 1, Mathf.FloorToInt(worldCenter.y + radius));
+            int minZ = Mathf.FloorToInt(worldCenter.z - radius);
+            int maxZ = Mathf.FloorToInt(worldCenter.z + radius);
+
+            for (int cy = minY; cy <= maxY; cy++)
+            {
+                for (int cz = minZ; cz <= maxZ; cz++)
+                {
+                    for (int cx = minX; cx <= maxX; cx++)
+                    {
+                        var coord = new Vector2Int(cx >> Chunk.Shift, cz >> Chunk.Shift);
+                        if (!chunks.TryGetValue(coord, out Chunk chunk))
+                            continue;
+
+                        float dx = worldCenter.x - Mathf.Clamp(worldCenter.x, cx, cx + 1f);
+                        float dy = worldCenter.y - Mathf.Clamp(worldCenter.y, cy, cy + 1f);
+                        float dz = worldCenter.z - Mathf.Clamp(worldCenter.z, cz, cz + 1f);
+                        if (dx * dx + dy * dy + dz * dz > radiusSqr)
+                            continue;
+
+                        var cell = new Vector3Int(cx, cy, cz);
+                        if (!FillEligible(chunk, cell, blockId, excludeBounds, out SubVoxelGrid partialGrid))
+                            continue;
+
+                        for (int sy = 0; sy < res; sy++)
+                        {
+                            for (int sz = 0; sz < res; sz++)
+                            {
+                                for (int sx = 0; sx < res; sx++)
+                                {
+                                    if (!SubCellInSphere(cell, sx, sy, sz, subSize, worldCenter, radiusSqr))
+                                        continue;
+
+                                    if (partialGrid != null && partialGrid.Get(
+                                            sx * partialGrid.Resolution / res,
+                                            sy * partialGrid.Resolution / res,
+                                            sz * partialGrid.Resolution / res))
+                                        continue; // already material — nothing to add here
+
+                                    subCells?.Add(new Vector3Int(cx * res + sx, cy * res + sy, cz * res + sz));
+                                    added++;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            return added;
+        }
+
+        /// <summary>
+        /// The one fill-eligibility rule, shared by FillSphere and its
+        /// preview. partialGrid is non-null only for the same-id promoted
+        /// partial case (whose existing sub-cells must be respected); air and
+        /// liquid cells report null — they are replaced wholesale.
+        /// </summary>
+        private bool FillEligible(
+            Chunk chunk, Vector3Int cell, ushort blockId, Bounds? excludeBounds, out SubVoxelGrid partialGrid)
+        {
+            partialGrid = null;
+
+            if (excludeBounds.HasValue)
+            {
+                var cellBounds = new Bounds(cell + new Vector3(0.5f, 0.5f, 0.5f), Vector3.one);
+                if (excludeBounds.Value.Intersects(cellBounds))
+                    return false;
+            }
+
+            int localX = cell.x & Chunk.Mask;
+            int localZ = cell.z & Chunk.Mask;
+            ushort id = chunk.Get(localX, cell.y, localZ);
+
+            if (id == BlockPalette.AirId)
+                return true;
+
+            if (id == blockId)
+            {
+                // Same material: only a promoted partial has room to fill.
+                return chunk.TryGetSubVoxels(localX, cell.y, localZ, out partialGrid) && !partialGrid.IsFull;
+            }
+
+            BlockDefinition definition = palette.GetDefinition(id);
+            return definition != null && definition.HasBehavior(BlockBehaviorFlags.Liquid);
+        }
+
+        private int FillCell(
+            Chunk chunk, Vector2Int coord, Vector3Int cell, ushort blockId,
+            SubVoxelGrid partialGrid, Vector3 center, float radiusSqr)
+        {
+            int localX = cell.x & Chunk.Mask;
+            int localZ = cell.z & Chunk.Mask;
+            int res = partialGrid != null ? partialGrid.Resolution : subVoxelResolution;
+            float subSize = 1f / res;
+
+            int added = 0;
+
+            if (partialGrid != null)
+            {
+                // Same-id partial: the grid gains its in-sphere sub-cells.
+                for (int sy = 0; sy < res; sy++)
+                {
+                    for (int sz = 0; sz < res; sz++)
+                    {
+                        for (int sx = 0; sx < res; sx++)
+                        {
+                            if (SubCellInSphere(cell, sx, sy, sz, subSize, center, radiusSqr)
+                                && partialGrid.Set(sx, sy, sz, true))
+                                added++;
+                        }
+                    }
+                }
+
+                if (added == 0)
+                    return 0;
+
+                chunk.MarkSubVoxelsModified();
+                chunk.DemoteFullSubVoxels(localX, cell.y, localZ);
+            }
+            else
+            {
+                // Air/liquid: count the covered sub-cells first — a fully
+                // covered cell becomes a plain full block, never a grid.
+                int inSphere = 0;
+                for (int sy = 0; sy < res; sy++)
+                {
+                    for (int sz = 0; sz < res; sz++)
+                    {
+                        for (int sx = 0; sx < res; sx++)
+                        {
+                            if (SubCellInSphere(cell, sx, sy, sz, subSize, center, radiusSqr))
+                                inSphere++;
+                        }
+                    }
+                }
+
+                if (inSphere == 0)
+                    return 0;
+
+                // Set replaces the cell wholesale (drops any liquid data);
+                // partial coverage then promotes and clears the uncovered
+                // sub-cells — the exact inverse of promote-then-carve.
+                chunk.Set(localX, cell.y, localZ, blockId);
+
+                if (inSphere < res * res * res)
+                {
+                    SubVoxelGrid grid = chunk.PromoteToSubVoxels(localX, cell.y, localZ, res);
+                    for (int sy = 0; sy < res; sy++)
+                    {
+                        for (int sz = 0; sz < res; sz++)
+                        {
+                            for (int sx = 0; sx < res; sx++)
+                            {
+                                if (!SubCellInSphere(cell, sx, sy, sz, subSize, center, radiusSqr))
+                                    grid.Set(sx, sy, sz, false);
+                            }
+                        }
+                    }
+
+                    chunk.MarkSubVoxelsModified();
+                }
+
+                added = inSphere;
+            }
+
+            carveDirtyChunks.Add(coord);
+            if (localX == 0)
+                carveDirtyChunks.Add(coord + Vector2Int.left);
+            else if (localX == Chunk.SizeX - 1)
+                carveDirtyChunks.Add(coord + Vector2Int.right);
+            if (localZ == 0)
+                carveDirtyChunks.Add(coord + Vector2Int.down);
+            else if (localZ == Chunk.SizeZ - 1)
+                carveDirtyChunks.Add(coord + Vector2Int.up);
+
+            return added;
+        }
+
         private int CarveCell(
             Chunk chunk, Vector2Int coord, int localX, int cy, int localZ,
             Vector3Int cell, BlockDefinition definition,

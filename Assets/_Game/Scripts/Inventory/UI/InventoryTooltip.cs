@@ -48,6 +48,10 @@ namespace IslandGame.Inventory.UI
                 durability;
 
             gameObject.SetActive(true);
+            // The height comes from the layout group + fitter; rebuild now so
+            // the first FollowPointer clamps against the real size instead of
+            // last item's.
+            LayoutRebuilder.ForceRebuildLayoutImmediate(rectTransform);
             FollowPointer();
         }
 
@@ -66,7 +70,17 @@ namespace IslandGame.Inventory.UI
             if (Mouse.current == null)
                 return;
 
-            rectTransform.position = Mouse.current.position.ReadValue() + PointerOffset;
+            Vector2 position = Mouse.current.position.ReadValue() + PointerOffset;
+
+            // Keep the whole tooltip on screen (pivot is top-left, so the rect
+            // extends right and down). rect size is in canvas units — scale to
+            // screen pixels before clamping.
+            float width = rectTransform.rect.width * rectTransform.lossyScale.x;
+            float height = rectTransform.rect.height * rectTransform.lossyScale.y;
+            position.x = Mathf.Clamp(position.x, 0f, Mathf.Max(0f, Screen.width - width));
+            position.y = Mathf.Clamp(position.y, Mathf.Min(height, Screen.height), (float)Screen.height);
+
+            rectTransform.position = position;
         }
     }
 }

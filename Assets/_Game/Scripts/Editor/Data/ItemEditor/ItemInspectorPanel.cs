@@ -157,6 +157,8 @@ namespace IslandGame.EditorTools.Data
 
                 EditorGUILayout.PropertyField(placedBlock, GUIContent.none, GUILayout.Width(110f));
             }
+
+            EditorGUILayout.PropertyField(serialized.FindProperty("placeRadius"));
         }
 
         // ------------------------------------------------------------------

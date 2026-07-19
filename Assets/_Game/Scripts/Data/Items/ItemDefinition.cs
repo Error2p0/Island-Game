@@ -135,6 +135,10 @@ namespace IslandGame.Data.Items
         [Tooltip("For Block/Placeable items: the voxel block placed in the terrain when this item is used. This is the item→block half of the link; BlockDefinition.DropItem is the block→item half.")]
         [SerializeField] private BlockDefinition placedBlock;
 
+        [Tooltip("World-space radius (meters) of the sub-voxel sphere FILLED per placement — the mirror of a tool's Mining Radius. 0 = classic single-block placement (precise building). Cost scales with volume: 1 item per full block volume actually added, rounded up. ~0.75 sculpts organic dirt/sand mounds.")]
+        [Min(0f)]
+        [SerializeField] private float placeRadius;
+
         [Header("Consumable")]
         [Tooltip("Hunger restored when eaten (category Consumable; the use/place button eats one unit — see PlayerStats). 0 = not edible.")]
         [Min(0f)]
@@ -220,6 +224,10 @@ namespace IslandGame.Data.Items
         public Quaternion HoldLocalRotation => Quaternion.Euler(holdLocalRotationEuler);
 
         public BlockDefinition PlacedBlock => placedBlock;
+
+        /// <summary>Fill-sphere radius per placement; 0 = classic single-block placement.</summary>
+        public float PlaceRadius => placeRadius;
+
         public BuildingPieceDefinition PlacedPiece => placedPiece;
 
 #if UNITY_EDITOR

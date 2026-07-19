@@ -149,12 +149,20 @@ namespace IslandGame.EditorTools
             content.anchorMin = new Vector2(0f, 1f);
             content.anchorMax = new Vector2(1f, 1f);
             content.pivot = new Vector2(0.5f, 1f);
+            // A fresh RectTransform defaults to sizeDelta (100,100); with the
+            // stretch anchors above that widens content 50 px past the viewport
+            // on each side, pushing the left-aligned grid's first column out
+            // under the mask. Zero it so content matches the viewport exactly.
+            content.sizeDelta = Vector2.zero;
             var grid = content.gameObject.AddComponent<GridLayoutGroup>();
             grid.cellSize = new Vector2(EntrySize, EntrySize);
             grid.spacing = new Vector2(Spacing, Spacing);
             grid.padding = new RectOffset(4, 4, 4, 4);
             grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
             grid.constraintCount = 8;
+            // Center the fixed 8-column block so the slack between grid width
+            // and viewport width splits evenly left/right.
+            grid.childAlignment = TextAnchor.UpperCenter;
             var fitter = content.gameObject.AddComponent<ContentSizeFitter>();
             fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 

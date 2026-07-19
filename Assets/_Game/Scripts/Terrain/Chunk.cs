@@ -143,6 +143,26 @@ namespace IslandGame.Terrain
                 IsModified = true;
         }
 
+        /// <summary>
+        /// Radius placement's demotion: a grid refilled to 100% is identical
+        /// to the intact block, so the entry drops and the cell costs 2 bytes
+        /// again — the mirror of carving's demote-to-air. No-op unless the
+        /// grid is actually full.
+        /// </summary>
+        public void DemoteFullSubVoxels(int x, int y, int z)
+        {
+            if (subVoxels == null)
+                return;
+
+            int index = Index(x, y, z);
+            if (!subVoxels.TryGetValue(index, out SubVoxelGrid grid) || !grid.IsFull)
+                return;
+
+            subVoxels.Remove(index);
+            if (IsGenerated)
+                IsModified = true;
+        }
+
         // ------------------------------------------------------------------
         // Save phase
         // ------------------------------------------------------------------

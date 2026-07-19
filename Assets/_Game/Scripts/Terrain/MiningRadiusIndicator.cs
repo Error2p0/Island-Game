@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using IslandGame.Data.Items;
 using IslandGame.Inventory;
+using IslandGame.Player;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -23,10 +24,20 @@ namespace IslandGame.Terrain
     /// 4 mm off the terrain so nothing z-fights).
     ///
     /// STATES: valid tint when the aimed block is minable by the active
-    /// profile; blocked tint (and the unfiltered sphere∩terrain shape, since
-    /// nothing would actually carve) when it is tier-blocked or unbreakable —
-    /// the permission verdict comes from PlayerBlockInteraction's
-    /// AimedBlockMinable, i.e. the very check that gates real mining.
+    /// profile, blending toward the progress tint as the current bite's
+    /// MiningProgress01 completes (radius mining's break-progress feedback —
+    /// the whole-block crack cube stayed with radius-less profiles, where the
+    /// block IS the bite); blocked tint (and the unfiltered sphere∩terrain
+    /// shape, since nothing would actually carve) when it is tier-blocked or
+    /// unbreakable — the permission verdict comes from
+    /// PlayerBlockInteraction's AimedBlockMinable, i.e. the very check that
+    /// gates real mining.
+    ///
+    /// PLACE MODE: a block item with PlaceRadius > 0 flips the overlay to
+    /// the FILL preview (VoxelWorld.CollectFillPreview — the read-only twin
+    /// of FillSphere, sharing its center bias, eligibility rule and
+    /// player-capsule exclusion): the shape shown is exactly the material the
+    /// next place click adds, tinted with placeColor.
     ///
     /// COST CONTROL: rebuilds only when something the shape depends on
     /// changed — the equip event (HotbarSelector.EquippedItemChanged, the
@@ -50,8 +61,15 @@ namespace IslandGame.Terrain
         [Tooltip("Overlay tint while the aimed block is unbreakable or above the active tier — nothing will carve.")]
         [SerializeField] private Color blockedColor = new Color(1f, 0.28f, 0.22f, 0.3f);
 
+        [Tooltip("Tint the valid overlay blends toward as the current bite's mining progress completes — the radius-mode replacement for the whole-block crack cube, on the exact bite shape.")]
+        [SerializeField] private Color progressColor = new Color(1f, 0.55f, 0.15f, 0.5f);
+
+        [Tooltip("Overlay tint while previewing a radius PLACEMENT fill (block item with Place Radius > 0) — the material the next place click adds.")]
+        [SerializeField] private Color placeColor = new Color(0.35f, 0.85f, 1f, 0.3f);
+
         private PlayerBlockInteraction interaction;
         private HotbarSelector selector;
+        private PlayerReferences references;
         private VoxelWorld world;
 
         private GameObject overlayObject;
@@ -69,8 +87,10 @@ namespace IslandGame.Terrain
         private Vector3Int lastCell;
         private bool lastBlocked;
         private bool lastWholeCell;
+        private bool lastPlaceMode;
+        private Vector3Int lastQuantizedPlayer;
         private int lastTerrainVersion = -1;
-        private bool lastAppliedBlockedColor;
+        private Color lastAppliedColor;
         private bool hasMesh;
 
         // Face basis in BlockFace order (Top,Bottom,North,South,East,West) —
@@ -101,6 +121,7 @@ namespace IslandGame.Terrain
         {
             interaction = GetComponent<PlayerBlockInteraction>();
             selector = GetComponent<HotbarSelector>();
+            references = GetComponent<PlayerReferences>();
         }
 
         private void Start()
@@ -161,31 +182,51 @@ namespace IslandGame.Terrain
             }
 
             MiningProfile profile = interaction.ActiveProfile;
-            bool blocked = !interaction.AimedBlockMinable;
-            bool wholeCell = profile.Radius <= 0f;
+
+            // PLACE MODE: a block item with a fill radius previews what the
+            // next place click ADDS (VoxelWorld's fill preview) instead of
+            // what a mining bite removes.
+            ItemDefinition equipped = selector != null ? selector.EquippedItem : null;
+            bool placeMode = equipped != null && equipped.PlacedBlock != null && equipped.PlaceRadius > 0f
+                             && (equipped.Category == ItemCategory.Block || equipped.Category == ItemCategory.Placeable);
+
+            bool blocked = !placeMode && !interaction.AimedBlockMinable;
+            bool wholeCell = !placeMode && profile.Radius <= 0f;
 
             Vector3 center = default;
             var quantizedCenter = new Vector3Int(int.MinValue, 0, 0);
             if (!wholeCell)
             {
-                center = profile.CarveCenter(interaction.AimedHitPoint, interaction.AimedHitNormal);
+                center = placeMode
+                    ? VoxelWorld.FillSphereCenter(interaction.AimedHitPoint, interaction.AimedHitNormal, equipped.PlaceRadius)
+                    : profile.CarveCenter(interaction.AimedHitPoint, interaction.AimedHitNormal);
                 // Half-sub-cell quantization: finer motion cannot change which
                 // sub-cell centers the sphere contains by more than a sliver.
                 quantizedCenter = Vector3Int.FloorToInt(center * (world.SubVoxelResolution * 2f));
             }
 
+            // The fill skips cells overlapping the player, so the preview must
+            // refresh as the player moves, not only as the aim moves.
+            Vector3Int quantizedPlayer = placeMode
+                ? Vector3Int.FloorToInt(references.Controller.bounds.center * 4f)
+                : default;
+
             bool dirty = equipDirty
                          || blocked != lastBlocked
                          || wholeCell != lastWholeCell
+                         || placeMode != lastPlaceMode
+                         || quantizedPlayer != lastQuantizedPlayer
                          || world.TerrainVersion != lastTerrainVersion
                          || (wholeCell ? interaction.AimedCell != lastCell : quantizedCenter != lastQuantizedCenter);
 
             if (dirty)
             {
-                RebuildOverlay(profile, center, blocked, wholeCell);
+                RebuildOverlay(profile, equipped, center, blocked, wholeCell, placeMode);
                 equipDirty = false;
                 lastBlocked = blocked;
                 lastWholeCell = wholeCell;
+                lastPlaceMode = placeMode;
+                lastQuantizedPlayer = quantizedPlayer;
                 lastTerrainVersion = world.TerrainVersion;
                 lastQuantizedCenter = quantizedCenter;
                 lastCell = interaction.AimedCell;
@@ -193,20 +234,56 @@ namespace IslandGame.Terrain
 
             if (overlayObject.activeSelf != hasMesh)
                 overlayObject.SetActive(hasMesh);
+
+            if (!hasMesh)
+                return;
+
+            if (placeMode)
+            {
+                ApplyColor(placeColor);
+                return;
+            }
+
+            // Radius-mode break progress lives on the bite shape itself (the
+            // crack cube only serves radius-less profiles — a full-block cube
+            // would paint faces this bite never touches): the overlay deepens
+            // toward the progress tint as the bite completes.
+            float progress = interaction.HasMiningTarget ? interaction.MiningProgress01 : 0f;
+            ApplyColor(blocked ? blockedColor : Color.Lerp(validColor, progressColor, progress));
+        }
+
+        private void ApplyColor(Color color)
+        {
+            if (color == lastAppliedColor)
+                return;
+
+            lastAppliedColor = color;
+            if (overlayMaterial.HasProperty("_BaseColor"))
+                overlayMaterial.SetColor("_BaseColor", color);
+            else
+                overlayMaterial.color = color;
         }
 
         // ------------------------------------------------------------------
         // Mesh building
         // ------------------------------------------------------------------
 
-        private void RebuildOverlay(MiningProfile profile, Vector3 center, bool blocked, bool wholeCell)
+        private void RebuildOverlay(
+            MiningProfile profile, ItemDefinition equipped, Vector3 center, bool blocked, bool wholeCell, bool placeMode)
         {
             subCells.Clear();
 
-            // Valid: exactly the cells the bite will clear (profile filter).
+            // Place mode: exactly the material the fill will add. Valid:
+            // exactly the cells the bite will clear (profile filter).
             // Blocked: nothing will carve — show the whole sphere∩terrain
             // region red so the denial is as legible as the promise.
-            if (wholeCell)
+            if (placeMode)
+            {
+                ushort placedId = world.Palette.GetId(equipped.PlacedBlock);
+                Bounds? exclude = equipped.PlacedBlock.IsSolid ? references.Controller.bounds : (Bounds?)null;
+                world.CollectFillPreview(center, equipped.PlaceRadius, placedId, exclude, subCells);
+            }
+            else if (wholeCell)
                 world.CollectCellPreview(interaction.AimedCell, subCells);
             else
                 world.CollectCarvePreview(center, profile.Radius, blocked ? null : profile.CanCarve, subCells);
@@ -239,16 +316,6 @@ namespace IslandGame.Terrain
             overlayMesh.indexFormat = IndexFormat.UInt32;
             overlayMesh.SetVertices(vertices);
             overlayMesh.SetTriangles(triangles, 0);
-
-            if (blocked != lastAppliedBlockedColor)
-            {
-                lastAppliedBlockedColor = blocked;
-                Color color = blocked ? blockedColor : validColor;
-                if (overlayMaterial.HasProperty("_BaseColor"))
-                    overlayMaterial.SetColor("_BaseColor", color);
-                else
-                    overlayMaterial.color = color;
-            }
         }
 
         private void EmitFace(Vector3Int subCell, int face, float subSize)
@@ -315,7 +382,7 @@ namespace IslandGame.Terrain
                 overlayMaterial.SetColor("_BaseColor", validColor);
             else
                 overlayMaterial.color = validColor;
-            lastAppliedBlockedColor = false;
+            lastAppliedColor = validColor;
 
             meshRenderer.sharedMaterial = overlayMaterial;
             overlayObject.SetActive(false);

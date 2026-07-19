@@ -42,11 +42,18 @@ namespace IslandGame.Creatures
         /// <summary>Fan of headings probed when the direct bearing is blocked, degrees.</summary>
         private static readonly float[] ProbeAngles = { 0f, 40f, -40f, 80f, -80f };
 
+        // Any fall this far below the last verified standing spot means the
+        // creature has clipped into a water/void column (a legitimate walk-off
+        // never exceeds maxDropHeight) — the fall-rescue snaps it back.
+        private const float FallRescueMargin = 4f;
+
         private Vector3 target;
         private float targetSpeed;
         private bool hasTarget;
         private float verticalVelocity;
         private float stuckTimer;
+        private Vector3 lastGroundedPosition;
+        private bool hasGroundedPosition;
 
         /// <summary>Actual horizontal speed this frame, m/s — drives the animator's Speed01.</summary>
         public float CurrentSpeed { get; private set; }
@@ -115,6 +122,7 @@ namespace IslandGame.Creatures
                 verticalVelocity += gravity * deltaTime;
                 position.y = Mathf.Max(0f, position.y + verticalVelocity * deltaTime);
                 transform.position = position;
+                TryFallRescue();
                 return;
             }
 
@@ -123,16 +131,38 @@ namespace IslandGame.Creatures
                 // Genuinely airborne (mined out from under us): gravity.
                 verticalVelocity += gravity * deltaTime;
                 position.y = Mathf.Max(groundY, position.y + verticalVelocity * deltaTime);
-            }
-            else
-            {
-                // On or near ground: smooth toward the surface so 1-block
-                // steps read as steps, not teleports.
-                verticalVelocity = 0f;
-                position.y = Mathf.MoveTowards(position.y, groundY, stepSmoothSpeed * deltaTime);
+                transform.position = position;
+                TryFallRescue();
+                return;
             }
 
+            // On or near ground: smooth toward the surface so 1-block
+            // steps read as steps, not teleports.
+            verticalVelocity = 0f;
+            position.y = Mathf.MoveTowards(position.y, groundY, stepSmoothSpeed * deltaTime);
             transform.position = position;
+
+            // This column is verified standable land — the fall-rescue's
+            // recovery point.
+            lastGroundedPosition = new Vector3(position.x, groundY, position.z);
+            hasGroundedPosition = true;
+        }
+
+        /// <summary>
+        /// Safety net, not navigation: a creature that somehow entered a
+        /// water/void column (where the ground query can never succeed and the
+        /// fall would continue to the world floor) is snapped back to the last
+        /// spot it verifiably stood on. Step validation prevents this from
+        /// happening; this catches whatever slips past it.
+        /// </summary>
+        private void TryFallRescue()
+        {
+            if (!hasGroundedPosition
+                || transform.position.y >= lastGroundedPosition.y - (maxDropHeight + FallRescueMargin))
+                return;
+
+            verticalVelocity = 0f;
+            transform.position = lastGroundedPosition;
         }
 
         // ------------------------------------------------------------------
@@ -172,7 +202,20 @@ namespace IslandGame.Creatures
                     continue;
 
                 float step = Mathf.Min(targetSpeed * deltaTime, distance);
-                transform.position = position + candidate * step;
+                Vector3 next = position + candidate * step;
+
+                // The look-ahead probe alone lets a heading that grazes a cell
+                // corner walk into a column it never sampled — at shorelines
+                // that's a water column one diagonal step wide, and standing
+                // in it means falling. A step that crosses into a new column
+                // must validate that column itself.
+                bool changesColumn = Mathf.FloorToInt(next.x) != Mathf.FloorToInt(position.x)
+                                     || Mathf.FloorToInt(next.z) != Mathf.FloorToInt(position.z);
+                if (changesColumn
+                    && !VoxelNavigation.IsStepWalkable(position, next, stepHeight, maxDropHeight, out _))
+                    continue;
+
+                transform.position = next;
                 CurrentSpeed = targetSpeed;
 
                 Quaternion heading = Quaternion.LookRotation(candidate, Vector3.up);
