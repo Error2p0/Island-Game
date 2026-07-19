@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using IslandGame.Data.Items;
+using IslandGame.Data.Stats;
 using UnityEngine;
 
 namespace IslandGame.Data.Creatures
@@ -95,6 +96,34 @@ namespace IslandGame.Data.Creatures
         [Min(0f)]
         [SerializeField] private float deathDespawnSeconds = 2.5f;
 
+        // Taming (taming phase). The custom inspector shows this section only
+        // while Tameable is set — the conditional-fields pattern the Item
+        // Editor uses for its weapon/tool sections.
+        [Header("Taming")]
+        [Tooltip("Can this species be tamed by feeding? Enables the taming fields below and the runtime CreatureTaming component.")]
+        [SerializeField] private bool tameable;
+
+        [Tooltip("Items this species accepts as taming food (holding one also suppresses a Passive species' proximity flee — the lure).")]
+        [SerializeField] private List<ItemDefinition> favoriteFoods = new List<ItemDefinition>();
+
+        [Tooltip("Successful feedings required to tame. Deterministic ON PURPOSE (no chance roll): the cost is plannable, and the (2/4) progress in the prompt is always honest.")]
+        [Min(1)]
+        [SerializeField] private int feedingsToTame = 3;
+
+        [Tooltip("Seconds between accepted feedings — taming is a little ritual, not a hotbar mash.")]
+        [Min(0f)]
+        [SerializeField] private float feedCooldownSeconds = 1.5f;
+
+        [Tooltip("Combat-capable companion: the tamed command cycle includes Assist (fights hostiles the player is engaged with).")]
+        [SerializeField] private bool canAssistInCombat;
+
+        [Tooltip("Stat modifiers applied once tamed (loyalty vigor: +health, +damage, ...). Same authored shape as item equip modifiers; applied through the standard StatModifier system, source-tagged to the taming component.")]
+        [SerializeField] private List<EquipStatModifier> tamedStatModifiers = new List<EquipStatModifier>();
+
+        [Tooltip("Follow mode keeps the companion about this far from the player, meters.")]
+        [Min(1f)]
+        [SerializeField] private float followDistance = 3.5f;
+
         public string Id => id;
         public string DisplayName => displayName;
         public string Description => description;
@@ -118,6 +147,20 @@ namespace IslandGame.Data.Creatures
         public DamageType AttackDamageType => attackDamageType;
         public float AggroDurationSeconds => aggroDurationSeconds;
         public float PackAlertRadius => packAlertRadius;
+
+        public bool Tameable => tameable;
+        public IReadOnlyList<ItemDefinition> FavoriteFoods => favoriteFoods;
+        public int FeedingsToTame => feedingsToTame;
+        public float FeedCooldownSeconds => feedCooldownSeconds;
+        public bool CanAssistInCombat => canAssistInCombat;
+        public IReadOnlyList<EquipStatModifier> TamedStatModifiers => tamedStatModifiers;
+        public float FollowDistance => followDistance;
+
+        /// <summary>True when the item counts as this species' taming food.</summary>
+        public bool IsFavoriteFood(ItemDefinition item)
+        {
+            return item != null && favoriteFoods.Contains(item);
+        }
 
 #if UNITY_EDITOR
         private void OnValidate()

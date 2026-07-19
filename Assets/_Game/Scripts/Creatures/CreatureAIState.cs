@@ -24,5 +24,11 @@ namespace IslandGame.Creatures
 
         /// <summary>One attack cycle: windup → timed hit window → recovery, then back to Chase to reposition (combat phase).</summary>
         Attack = 5,
+
+        /// <summary>Tamed branch (taming phase): keeping station near the player; Assist mode engages from here.</summary>
+        TamedFollow = 6,
+
+        /// <summary>Tamed branch (taming phase): holding the commanded position.</summary>
+        TamedStay = 7,
     }
 }

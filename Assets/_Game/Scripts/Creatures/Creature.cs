@@ -61,6 +61,14 @@ namespace IslandGame.Creatures
         /// <summary>The spawner that owns/pools this instance; null for hand-placed creatures.</summary>
         public CreatureSpawner OwnerSpawner { get; set; }
 
+        /// <summary>
+        /// Taming phase: true once this individual belongs to the player.
+        /// Set by CreatureTaming (which also releases spawner ownership, so a
+        /// tamed creature is never pooled/despawned as wildlife again);
+        /// cleared by Init so pooled wild reuse always starts wild.
+        /// </summary>
+        public bool IsTamed { get; set; }
+
         /// <summary>Fires once at 0 health, before the despawn timer starts. The combat phase's loot/corpse handling subscribes here.</summary>
         public event Action<Creature> OnDeath;
 
@@ -101,8 +109,18 @@ namespace IslandGame.Creatures
             definition = creatureDefinition;
             HomePosition = home;
             IsDead = false;
+            IsTamed = false;
             initialized = true;
             name = $"Creature_{definition.Id}";
+
+            // Taming phase: tameable species carry their taming component
+            // from birth (attached here, not on prefabs, so existing prefabs
+            // need no rebuild). Pooled reuse resets any previous progress.
+            var taming = GetComponent<CreatureTaming>();
+            if (taming == null && definition.Tameable)
+                taming = gameObject.AddComponent<CreatureTaming>();
+            if (taming != null)
+                taming.ResetWild();
 
             // Pooled reuse after a death: the animator was handed off to the
             // death pose — give it the body back.

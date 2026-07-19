@@ -165,7 +165,14 @@ namespace IslandGame.Saving
         public bool spawnOnlyAtNight;
     }
 
-    /// <summary>Reserved for a future taming/naming phase — wild creatures intentionally don't persist.</summary>
+    /// <summary>
+    /// One tamed companion (taming phase — the case this class was reserved
+    /// for). WILD creatures still intentionally don't persist (spawners
+    /// repopulate them); only the player's named individuals are written.
+    /// mode/yaw/stats are additive fields with defaults, per the migration
+    /// policy; health is kept alongside the full stat list for forward/
+    /// backward tolerance.
+    /// </summary>
     [Serializable]
     public sealed class SavedCreature
     {
@@ -173,5 +180,10 @@ namespace IslandGame.Saving
         public Vector3 position;
         public float health;
         public string customName;
+
+        // Taming phase additions.
+        public float yaw;
+        public string mode = "Follow";
+        public List<SavedStat> stats = new List<SavedStat>();
     }
 }

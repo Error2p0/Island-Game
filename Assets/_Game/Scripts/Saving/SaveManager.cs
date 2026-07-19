@@ -5,6 +5,7 @@ using System.IO;
 using IslandGame.Building;
 using IslandGame.Data.Building;
 using IslandGame.Data.Items;
+using IslandGame.Data.Stats;
 using IslandGame.Inventory;
 using IslandGame.Player;
 using IslandGame.Sky;
@@ -150,6 +151,7 @@ namespace IslandGame.Saving
             WritePieces(save.pieces);
             WriteStructureCells(save.structureCells);
             WriteGuardSpawners(save.guardSpawners);
+            WriteOwnedCreatures(save.ownedCreatures);
 
             try
             {
@@ -369,6 +371,48 @@ namespace IslandGame.Saving
             }
         }
 
+        /// <summary>
+        /// Taming phase — the persistence case SavedCreature was reserved
+        /// for: gathers every LIVING tamed companion from the CreatureTaming
+        /// registry (the same live-registry gather pattern the piece/campfire
+        /// writes use). Wild creatures stay deliberately unsaved — spawners
+        /// repopulate them; that policy is unchanged.
+        /// </summary>
+        private static void WriteOwnedCreatures(List<SavedCreature> output)
+        {
+            output.Clear();
+            var companions = Creatures.CreatureTaming.TamedCompanions;
+            for (int i = 0; i < companions.Count; i++)
+            {
+                var tamed = companions[i];
+                if (tamed == null || tamed.Creature == null || tamed.Creature.IsDead
+                    || tamed.Creature.Definition == null)
+                    continue;
+
+                var data = new SavedCreature
+                {
+                    creatureId = tamed.Creature.Definition.Id,
+                    position = tamed.transform.position,
+                    yaw = tamed.transform.eulerAngles.y,
+                    customName = tamed.CompanionName,
+                    mode = tamed.Mode.ToString(),
+                    health = tamed.Creature.Stats.GetValue(StatIds.Health),
+                };
+
+                var instances = tamed.Creature.Stats.Instances;
+                for (int s = 0; s < instances.Count; s++)
+                {
+                    data.stats.Add(new SavedStat
+                    {
+                        statId = instances[s].Definition.Id,
+                        current = instances[s].Current,
+                    });
+                }
+
+                output.Add(data);
+            }
+        }
+
         // ==================================================================
         // LOAD
         // ==================================================================
@@ -458,6 +502,7 @@ namespace IslandGame.Saving
             RestorePlayer(save.player);
             RestorePieces(save.pieces);
             RestoreGuardSpawners(save.guardSpawners);
+            RestoreOwnedCreatures(save.ownedCreatures);
 
             IsApplyingLoad = false;
             ResetAutosaveClock();
@@ -623,6 +668,60 @@ namespace IslandGame.Saving
                     var chest = piece.GetComponentInChildren<ChestBehavior>(true);
                     if (chest != null && chest.Storage != null)
                         RestoreInventory(chest.Storage, saved.chestSlots);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Taming phase: recreates each saved companion — instantiate the
+        /// species prefab standalone (no spawner: a companion is never
+        /// spawner-owned), Init, RestoreTamed (tamed flag + modifiers + AI
+        /// mode + name), THEN stat currents — after the modifiers, so a
+        /// buffed max can't clamp a saved current down.
+        /// </summary>
+        private static void RestoreOwnedCreatures(List<SavedCreature> saved)
+        {
+            if (saved.Count == 0)
+                return;
+
+            var database = Data.Creatures.CreatureDatabase.Instance;
+            if (database == null)
+                return;
+
+            foreach (SavedCreature data in saved)
+            {
+                if (!database.TryGet(data.creatureId, out Data.Creatures.CreatureDefinition definition)
+                    || definition.Prefab == null)
+                {
+                    Debug.LogWarning($"[Save] Companion species '{data.creatureId}' no longer exists — skipped.");
+                    continue;
+                }
+
+                GameObject instance = Instantiate(
+                    definition.Prefab, data.position, Quaternion.Euler(0f, data.yaw, 0f));
+                var creature = instance.GetComponent<Creatures.Creature>();
+                if (creature == null)
+                    creature = instance.AddComponent<Creatures.Creature>();
+
+                creature.Init(definition, data.position);
+
+                var taming = instance.GetComponent<Creatures.CreatureTaming>();
+                if (taming == null)
+                    taming = instance.AddComponent<Creatures.CreatureTaming>();
+
+                Creatures.CompanionMode mode = Enum.TryParse(data.mode, out Creatures.CompanionMode parsed)
+                    ? parsed
+                    : Creatures.CompanionMode.Follow;
+                taming.RestoreTamed(data.customName, mode);
+
+                if (data.stats.Count > 0)
+                {
+                    foreach (SavedStat stat in data.stats)
+                        creature.Stats.SetCurrent(stat.statId, stat.current);
+                }
+                else if (data.health > 0f)
+                {
+                    creature.Stats.SetCurrent(StatIds.Health, data.health);
                 }
             }
         }

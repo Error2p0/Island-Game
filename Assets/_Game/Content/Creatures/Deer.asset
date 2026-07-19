@@ -41,5 +41,22 @@ MonoBehaviour:
   loseInterestSeconds: 4
   approachDistance: 1.6
   requireLineOfSight: 1
+  attackWindupSeconds: 0.35
+  attackCooldownSeconds: 1.4
+  attackDamageType: 0
+  aggroDurationSeconds: 30
+  packAlertRadius: 0
   eyeHeight: 0.6
   deathDespawnSeconds: 2.5
+  tameable: 1
+  favoriteFoods:
+  - {fileID: 11400000, guid: 82730570662cd174f875a58269af7931, type: 2}
+  feedingsToTame: 3
+  feedCooldownSeconds: 1.5
+  canAssistInCombat: 0
+  tamedStatModifiers:
+  - statId: health
+    target: 0
+    type: 1
+    value: 0.2
+  followDistance: 3.5

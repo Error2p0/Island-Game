@@ -54,3 +54,19 @@ MonoBehaviour:
   packAlertRadius: 16
   eyeHeight: 0.6
   deathDespawnSeconds: 2.5
+  tameable: 1
+  favoriteFoods:
+  - {fileID: 11400000, guid: 0e598bd11802cfd46b4bfe6c5f5b9b21, type: 2}
+  feedingsToTame: 4
+  feedCooldownSeconds: 1.5
+  canAssistInCombat: 1
+  tamedStatModifiers:
+  - statId: health
+    target: 0
+    type: 1
+    value: 0.25
+  - statId: attack_damage
+    target: 0
+    type: 1
+    value: 0.15
+  followDistance: 3.5

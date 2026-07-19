@@ -120,8 +120,8 @@ namespace IslandGame.Player
         [Tooltip("Water drag: how fast momentum (including a dive plunge) bleeds off.")]
         [SerializeField] private float swimDeceleration = 10f;
 
-        [Tooltip("How deep the feet float below the surface at rest. 1.45 keeps the eyes just above water.")]
-        [SerializeField] private float floatDepth = 1.45f;
+        [Tooltip("How far the eyes rest above the water surface while floating idle. The float line is derived from the camera pivot's live height, so it tracks whatever the swim pose does to the head.")]
+        [SerializeField] private float eyeSurfaceClearance = 0.08f;
 
         [Tooltip("Buoyancy spring strength pulling the body toward its float line (per meter of offset).")]
         [SerializeField] private float buoyancySpring = 2.5f;
@@ -155,6 +155,10 @@ namespace IslandGame.Player
 
         private const float MoveInputDeadzone = 0.1f;
         private const string WaterTag = "Water";
+
+        // Buoyancy may never lift the feet closer to the surface than the swim
+        // exit depth plus this margin, or floating itself would exit Swimming.
+        private const float FloatExitDepthMargin = 0.1f;
 
         /// <summary>Grounded result of the most recent controller move.</summary>
         public bool IsGrounded { get; private set; } = true;
@@ -437,7 +441,17 @@ namespace IslandGame.Player
 
             // Buoyancy spring toward the float line — skipped while the player
             // deliberately swims downward, so diving doesn't fight the water.
-            float floatTargetY = WaterSurfaceY - floatDepth;
+            // The float line rests the EYES just above the surface, measured
+            // from the camera pivot's live height so it follows the animated
+            // swim pose (a fixed feet-depth constant went stale when the swim
+            // clips pitched the body and lowered the hips). Clamped below the
+            // swim-exit line: the near-flat stroke pose would otherwise raise
+            // the body shallow enough to kick the state machine out of
+            // Swimming in open water.
+            float eyeHeightAboveFeet = references.CameraPivot.position.y - transform.position.y;
+            float floatTargetY = Mathf.Min(
+                WaterSurfaceY + eyeSurfaceClearance - eyeHeightAboveFeet,
+                WaterSurfaceY - (swimExitDepth + FloatExitDepthMargin));
             float feetY = transform.position.y;
             if (targetVelocity.y >= -0.05f)
             {

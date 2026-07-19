@@ -282,6 +282,25 @@ namespace IslandGame.Creatures
             return creature;
         }
 
+        /// <summary>
+        /// Taming phase: removes a creature from this spawner's bookkeeping
+        /// WITHOUT pooling — a tamed companion is a persistent individual,
+        /// not respawnable wildlife. The population slot frees up (wild kin
+        /// may repopulate normally), the night modifiers this spawner applied
+        /// are stripped, and OwnerSpawner clears so Creature.Despawn would
+        /// Destroy rather than pool if it ever ran on the companion.
+        /// </summary>
+        public void ReleaseOwnership(Creature creature)
+        {
+            if (creature == null)
+                return;
+
+            alive.Remove(creature);
+            creature.OwnerSpawner = null;
+            creature.transform.SetParent(null, true);
+            creature.Stats.RemoveAllFromSource(this);
+        }
+
         /// <summary>Returns an instance to the pool (death despawn or out-of-range despawn). Called by Creature.Despawn.</summary>
         public void Release(Creature creature)
         {
@@ -304,6 +323,15 @@ namespace IslandGame.Creatures
                 Creature creature = alive[i];
                 if (creature == null)
                 {
+                    alive.RemoveAt(i);
+                    continue;
+                }
+
+                if (creature.IsTamed)
+                {
+                    // Defensive: taming releases ownership, so a tamed
+                    // creature should never still be listed — but if it is,
+                    // never distance-despawn a companion.
                     alive.RemoveAt(i);
                     continue;
                 }

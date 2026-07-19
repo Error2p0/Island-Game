@@ -66,6 +66,7 @@ namespace IslandGame.EditorTools
                 ("Create death content (gravestone + penalty policy)", DeathContentCreator.Create),
                 ("Create player stat definitions", StatContentCreator.Create),
                 ("Create example creatures", CreatureContentCreator.Create),
+                ("Create taming content (wolf/deer tameable)", TamingContentCreator.Create),
                 ("Create example structures", StructureContentCreator.Create),
                 ("Build player rig", PlayerRigBuilder.BuildPlayerRig),
                 ("Build player animations & controller", PlayerAnimationBuilder.Build),
@@ -83,6 +84,7 @@ namespace IslandGame.EditorTools
                 ("Build crafting menu UI", CraftingMenuUIBuilder.Build),
                 ("Build stats HUD", StatsHudBuilder.Build),
                 ("Build interaction prompt HUD", InteractionHudBuilder.Build),
+                ("Build companion UI", CompanionUIBuilder.Build),
                 ("Create example creature spawners", CreatureContentCreator.CreateExampleSpawners),
                 ("Add save system", SaveSystemBuilder.Create),
                 ("Place player at spawn", PlacePlayerAtSpawn),
@@ -145,6 +147,7 @@ namespace IslandGame.EditorTools
             DeleteByName("StatsHudCanvas");
             DeleteByName("InteractionPromptCanvas");
             DeleteByName("DeathScreenCanvas");
+            DeleteByName("CompanionUICanvas");
             DeleteByName("CreatureSpawners");
             DeleteByName("SaveSystem");
 

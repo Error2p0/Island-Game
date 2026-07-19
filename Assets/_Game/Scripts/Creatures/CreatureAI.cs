@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using IslandGame.Combat;
 using IslandGame.Data.Creatures;
 using IslandGame.Data.Stats;
+using IslandGame.Inventory;
 using IslandGame.Player;
 using UnityEngine;
 
@@ -38,6 +39,18 @@ namespace IslandGame.Creatures
     /// a 0.2 s tick with a random per-creature phase so a herd never checks
     /// on the same frame; state logic itself is trivial per-frame math. The
     /// player is resolved once through a static cache shared by all creatures.
+    ///
+    /// TAMED BRANCH (taming phase — a mode ON TOP of the machine, not a new
+    /// one): CreatureTaming flips Creature.IsTamed and calls EnterTamedMode;
+    /// from then on the wild reactions are gated off (no detection reactions,
+    /// no flee, no grudges, no pack alerts sent OR received) and the machine
+    /// runs TamedFollow / TamedStay. Assist reuses the EXISTING Chase/Attack
+    /// states verbatim through a combat-target seam (TryGetCombatTarget):
+    /// wild creatures target the player as always; a tamed assist targets a
+    /// hostile creature engaged with the player — one attack resolution, two
+    /// targets. Also in this phase: a wild tameable creature is LURED by its
+    /// favorite food (proximity flee suppressed while the player brandishes
+    /// it — walking up to feed a deer must be possible; damage still flees).
     /// </summary>
     [DisallowMultipleComponent]
     [RequireComponent(typeof(Creature))]
@@ -47,6 +60,16 @@ namespace IslandGame.Creatures
         private const float DetectionInterval = 0.2f;
         private const float ChaseGiveUpRadiusMultiplier = 1.6f;
         private const float WanderSpeedFraction = 0.45f;
+
+        // Taming phase tuning (behavior constants; per-species numbers live
+        // on the definition).
+        private const float TamedFollowRunDistance = 8f;
+        private const float TamedTeleportDistance = 45f;
+        private const float TamedStayTolerance = 2.5f;
+        private const float AssistEngageRadius = 14f;
+        private const float AssistLeashRadius = 20f;
+        private const float AssistScanInterval = 0.5f;
+        private const float FoodLureRadius = 12f;
 
         private static readonly int Speed01Hash = Animator.StringToHash("Speed01");
         private static readonly int AttackHash = Animator.StringToHash("Attack");
@@ -74,10 +97,38 @@ namespace IslandGame.Creatures
         private Vector3 repositionTarget;
         private int strafeSign = 1;
 
+        // Taming phase state.
+        private CompanionMode companionMode = CompanionMode.Follow;
+        private Vector3 stayPosition;
+        private Creature assistTarget;
+        private float nextAssistScanTime;
+        private static HotbarSelector cachedSelector;
+
         private readonly RaycastHit[] sightBuffer = new RaycastHit[8];
 
         /// <summary>Current state, exposed for debugging/gizmos and the combat phase's attack layer.</summary>
         public CreatureAIState State => state;
+
+        /// <summary>The tamed command mode (meaningful only while the creature is tamed). Persisted by the save system.</summary>
+        public CompanionMode CompanionMode => companionMode;
+
+        /// <summary>
+        /// Taming API: switches into (or between) the tamed modes. Called by
+        /// CreatureTaming on tame, command cycle and save restore. Clears
+        /// every wild leftover (grudge, targets) so the transition is total.
+        /// </summary>
+        public void EnterTamedMode(CompanionMode mode)
+        {
+            companionMode = mode;
+            stayPosition = transform.position;
+            aggroUntil = 0f;
+            assistTarget = null;
+            lostTargetTimer = 0f;
+            repositionUntil = 0f;
+            mover.ClearTarget();
+            state = mode == CompanionMode.Stay ? CreatureAIState.TamedStay : CreatureAIState.TamedFollow;
+            stateTimer = 0f;
+        }
 
         private static PlayerReferences Player
         {
@@ -135,7 +186,18 @@ namespace IslandGame.Creatures
                 return;
             }
 
-            if (Time.time >= nextDetectionTime)
+            // Tamed companions don't watch the player as a threat — skip the
+            // detection tick entirely (they also can't be in wild states, but
+            // a pooled OnEnable lands in Idle before RestoreTamed runs, so
+            // route stray wild states back to the tamed branch defensively).
+            if (creature.IsTamed)
+            {
+                playerDetected = false;
+                if (state != CreatureAIState.TamedFollow && state != CreatureAIState.TamedStay
+                    && state != CreatureAIState.Chase && state != CreatureAIState.Attack)
+                    EnterTamedMode(companionMode);
+            }
+            else if (Time.time >= nextDetectionTime)
             {
                 nextDetectionTime = Time.time + DetectionInterval;
                 playerDetected = DetectPlayer();
@@ -151,6 +213,8 @@ namespace IslandGame.Creatures
                 case CreatureAIState.Flee: TickFlee(); break;
                 case CreatureAIState.Chase: TickChase(); break;
                 case CreatureAIState.Attack: TickAttack(); break;
+                case CreatureAIState.TamedFollow: TickTamedFollow(); break;
+                case CreatureAIState.TamedStay: TickTamedStay(); break;
             }
 
             UpdateAnimator();
@@ -232,9 +296,12 @@ namespace IslandGame.Creatures
                     break;
 
                 case CreatureAggression.Passive:
-                    // Wary freeze: keep staring; bolt when the player crowds in.
+                    // Wary freeze: keep staring; bolt when the player crowds
+                    // in — unless lured (taming phase): a brandished favorite
+                    // food reads as safe, which is what makes walking up to
+                    // feed a skittish species possible. Damage still flees.
                     float distance = Vector3.Distance(transform.position, player.transform.position);
-                    if (distance <= Definition.FleeTriggerDistance)
+                    if (distance <= Definition.FleeTriggerDistance && !IsLuredByFood(player))
                         EnterFlee();
                     break;
 
@@ -293,35 +360,51 @@ namespace IslandGame.Creatures
 
         private void TickChase()
         {
-            PlayerReferences player = Player;
-            if (player == null)
+            // The combat-target seam (taming phase): the player for wild
+            // creatures, the assist target for a tamed companion — every
+            // line below is target-agnostic.
+            if (!TryGetCombatTarget(out Vector3 targetPosition, out _))
             {
-                EnterIdle();
+                ExitCombat();
                 return;
             }
 
-            Vector3 playerPosition = player.transform.position;
-            float distance = Vector3.Distance(transform.position, playerPosition);
+            float distance = Vector3.Distance(transform.position, targetPosition);
 
-            // Give up after the player stays out of extended range long enough.
-            if (distance > DetectionRadius * ChaseGiveUpRadiusMultiplier)
+            if (creature.IsTamed)
             {
-                lostTargetTimer += Time.deltaTime;
-                if (lostTargetTimer >= Definition.LoseInterestSeconds)
+                // Companion leash: never chase a target that has left the
+                // player's fight — back to station instead of across the map.
+                PlayerReferences player = Player;
+                if (player == null
+                    || (targetPosition - player.transform.position).sqrMagnitude > AssistLeashRadius * AssistLeashRadius)
                 {
-                    // Successful escape: a Neutral's grudge ends here (the
-                    // "flees successfully" clause); walk home rather than
-                    // idling wherever the chase died.
-                    aggroUntil = 0f;
-                    state = CreatureAIState.Wander;
-                    stateTimer = 0f;
-                    mover.SetTarget(creature.HomePosition, MoveSpeed * WanderSpeedFraction);
+                    ExitCombat();
                     return;
                 }
             }
             else
             {
-                lostTargetTimer = 0f;
+                // Give up after the player stays out of extended range long enough.
+                if (distance > DetectionRadius * ChaseGiveUpRadiusMultiplier)
+                {
+                    lostTargetTimer += Time.deltaTime;
+                    if (lostTargetTimer >= Definition.LoseInterestSeconds)
+                    {
+                        // Successful escape: a Neutral's grudge ends here (the
+                        // "flees successfully" clause); walk home rather than
+                        // idling wherever the chase died.
+                        aggroUntil = 0f;
+                        state = CreatureAIState.Wander;
+                        stateTimer = 0f;
+                        mover.SetTarget(creature.HomePosition, MoveSpeed * WanderSpeedFraction);
+                        return;
+                    }
+                }
+                else
+                {
+                    lostTargetTimer = 0f;
+                }
             }
 
             // Post-attack reposition: a short sidestep before closing again,
@@ -340,7 +423,7 @@ namespace IslandGame.Creatures
             }
             else
             {
-                mover.SetTarget(playerPosition, MoveSpeed);
+                mover.SetTarget(targetPosition, MoveSpeed);
             }
         }
 
@@ -357,35 +440,32 @@ namespace IslandGame.Creatures
 
         private void TickAttack()
         {
-            PlayerReferences player = Player;
-            if (player == null)
+            // Same combat-target seam as Chase: ONE attack resolution serves
+            // wild-vs-player and companion-vs-hostile alike (taming phase).
+            if (!TryGetCombatTarget(out Vector3 targetPosition, out IDamageable damageable))
             {
-                EnterIdle();
+                ExitCombat();
                 return;
             }
 
-            Vector3 playerPosition = player.transform.position;
-            mover.FaceTowards(playerPosition, Time.deltaTime);
+            mover.FaceTowards(targetPosition, Time.deltaTime);
 
             // The timed hit window: damage lands at the windup point of the
-            // attack animation, and only if the player is STILL in range —
+            // attack animation, and only if the target is STILL in range —
             // backpedaling out of a windup dodges the hit.
             if (!attackHitResolved && stateTimer >= Definition.AttackWindupSeconds)
             {
                 attackHitResolved = true;
 
                 float hitRange = Definition.ApproachDistance + 0.75f;
-                if ((playerPosition - transform.position).sqrMagnitude <= hitRange * hitRange)
+                if (damageable != null
+                    && (targetPosition - transform.position).sqrMagnitude <= hitRange * hitRange)
                 {
-                    var damageable = player.GetComponent<IDamageable>();
-                    if (damageable != null)
-                    {
-                        Vector3 hitPoint = playerPosition + Vector3.up * 1.1f;
-                        Vector3 direction = (playerPosition - transform.position).normalized;
-                        var info = new DamageInfo(
-                            AttackDamage, Definition.AttackDamageType, hitPoint, direction, gameObject);
-                        damageable.ApplyDamage(in info);
-                    }
+                    Vector3 hitPoint = targetPosition + Vector3.up * (creature.IsTamed ? 0.6f : 1.1f);
+                    Vector3 direction = (targetPosition - transform.position).normalized;
+                    var info = new DamageInfo(
+                        AttackDamage, Definition.AttackDamageType, hitPoint, direction, gameObject);
+                    damageable.ApplyDamage(in info);
                 }
             }
 
@@ -394,14 +474,162 @@ namespace IslandGame.Creatures
             if (stateTimer >= Definition.AttackCooldownSeconds)
             {
                 strafeSign = -strafeSign;
-                Vector3 fromPlayer = transform.position - playerPosition;
-                fromPlayer.y = 0f;
-                Vector3 away = fromPlayer.sqrMagnitude > 0.01f ? fromPlayer.normalized : -transform.forward;
+                Vector3 fromTarget = transform.position - targetPosition;
+                fromTarget.y = 0f;
+                Vector3 away = fromTarget.sqrMagnitude > 0.01f ? fromTarget.normalized : -transform.forward;
                 Vector3 side = Vector3.Cross(Vector3.up, away) * strafeSign;
 
-                repositionTarget = playerPosition + (away + side * 1.2f).normalized * (Definition.ApproachDistance + 1.2f);
+                repositionTarget = targetPosition + (away + side * 1.2f).normalized * (Definition.ApproachDistance + 1.2f);
                 repositionUntil = Time.time + 0.7f;
                 EnterChase();
+            }
+        }
+
+        /// <summary>
+        /// The combat-target seam (taming phase): wild = the player (exactly
+        /// the pre-taming behavior), tamed = the current assist target. False
+        /// means combat has nothing to fight — callers ExitCombat.
+        /// </summary>
+        private bool TryGetCombatTarget(out Vector3 position, out IDamageable damageable)
+        {
+            if (creature.IsTamed)
+            {
+                if (assistTarget != null && !assistTarget.IsDead)
+                {
+                    position = assistTarget.transform.position;
+                    damageable = assistTarget;
+                    return true;
+                }
+
+                position = default;
+                damageable = null;
+                return false;
+            }
+
+            PlayerReferences player = Player;
+            if (player == null)
+            {
+                position = default;
+                damageable = null;
+                return false;
+            }
+
+            position = player.transform.position;
+            damageable = player.GetComponent<IDamageable>();
+            return true;
+        }
+
+        /// <summary>Combat over/unwinnable: a companion returns to its commanded station, a wild creature to Idle.</summary>
+        private void ExitCombat()
+        {
+            assistTarget = null;
+            if (creature.IsTamed)
+                EnterTamedMode(companionMode);
+            else
+                EnterIdle();
+        }
+
+        // ------------------------------------------------------------------
+        // Tamed branch (taming phase)
+        // ------------------------------------------------------------------
+
+        private void TickTamedFollow()
+        {
+            PlayerReferences player = Player;
+            if (player == null)
+            {
+                mover.ClearTarget();
+                return;
+            }
+
+            Vector3 playerPosition = player.transform.position;
+            float distance = Vector3.Distance(transform.position, playerPosition);
+
+            // Catch-up teleport: a hopelessly dropped companion (cliffs,
+            // water, mining tunnels) pops back to the player's side rather
+            // than being lost — the reference games all do this.
+            if (distance > TamedTeleportDistance)
+            {
+                TeleportBesidePlayer(playerPosition);
+                return;
+            }
+
+            // Assist: engage hostiles that are fighting the player. Chase/
+            // Attack then run with the assist target through the combat seam.
+            if (companionMode == CompanionMode.Assist && Time.time >= nextAssistScanTime)
+            {
+                nextAssistScanTime = Time.time + AssistScanInterval;
+                Creature threat = FindAssistTarget(playerPosition);
+                if (threat != null)
+                {
+                    assistTarget = threat;
+                    EnterChase();
+                    return;
+                }
+            }
+
+            if (distance > Definition.FollowDistance)
+            {
+                mover.SetTarget(playerPosition,
+                    distance > TamedFollowRunDistance ? MoveSpeed : MoveSpeed * 0.6f);
+            }
+            else
+            {
+                mover.ClearTarget();
+                mover.FaceTowards(playerPosition, Time.deltaTime);
+            }
+        }
+
+        private void TickTamedStay()
+        {
+            // Hold the commanded spot; walk back when shoved off it. No
+            // assist engagement from Stay — stay means stay.
+            float drift = Vector3.Distance(transform.position, stayPosition);
+            if (drift > TamedStayTolerance)
+                mover.SetTarget(stayPosition, MoveSpeed * 0.5f);
+            else if (mover.HasArrived || drift < 0.8f)
+                mover.ClearTarget();
+        }
+
+        /// <summary>Nearest living wild creature currently in Chase/Attack (i.e. fighting the player) within engage range of the player.</summary>
+        private Creature FindAssistTarget(Vector3 playerPosition)
+        {
+            float bestSqr = AssistEngageRadius * AssistEngageRadius;
+            Creature best = null;
+
+            for (int i = 0; i < activeAIs.Count; i++)
+            {
+                CreatureAI other = activeAIs[i];
+                if (other == this || other.creature.IsTamed || other.creature.IsDead)
+                    continue;
+
+                if (other.state != CreatureAIState.Chase && other.state != CreatureAIState.Attack)
+                    continue;
+
+                float sqr = (other.transform.position - playerPosition).sqrMagnitude;
+                if (sqr <= bestSqr)
+                {
+                    bestSqr = sqr;
+                    best = other.creature;
+                }
+            }
+
+            return best;
+        }
+
+        private void TeleportBesidePlayer(Vector3 playerPosition)
+        {
+            Vector2 offset = Random.insideUnitCircle.normalized * 2.5f;
+            Vector3 candidate = playerPosition + new Vector3(offset.x, 0f, offset.y);
+
+            // Ground through the same voxel sampling the spawner uses; water
+            // or missing data just skips — the walk continues and the next
+            // frame retries with a fresh offset.
+            if (VoxelNavigation.TryGetGroundHeight(candidate + Vector3.up * 8f, 2, 60, out float groundY, out bool onWater)
+                && !onWater)
+            {
+                mover.ClearTarget();
+                transform.position = new Vector3(candidate.x, groundY, candidate.z);
             }
         }
 
@@ -412,7 +640,7 @@ namespace IslandGame.Creatures
         /// <summary>Routes a fresh detection per EFFECTIVE aggression (an aggroed Neutral re-chases). Returns true when the state changed.</summary>
         private bool ReactToDetection()
         {
-            if (!playerDetected)
+            if (creature.IsTamed || !playerDetected)
                 return false;
 
             switch (EffectiveAggression)
@@ -429,6 +657,25 @@ namespace IslandGame.Creatures
 
         private void OnDamaged(Creature damagedCreature, DamageInfo damage)
         {
+            // Tamed companions never flee, never grudge the player and never
+            // pack-alert. In Assist mode they retaliate against a wild
+            // creature that hurt them (self-defense through the same combat
+            // seam); Follow/Stay stoically hold their orders.
+            if (creature.IsTamed)
+            {
+                if (companionMode == CompanionMode.Assist && damage.Source != null)
+                {
+                    var attacker = damage.Source.GetComponent<Creature>();
+                    if (attacker != null && !attacker.IsTamed && !attacker.IsDead)
+                    {
+                        assistTarget = attacker;
+                        EnterChase();
+                    }
+                }
+
+                return;
+            }
+
             ReactToThreat();
             BroadcastPackAlert();
         }
@@ -474,9 +721,27 @@ namespace IslandGame.Creatures
                 if (other == this || other.creature.IsDead || other.Definition != Definition)
                     continue;
 
+                if (other.creature.IsTamed)
+                    continue; // a tamed pack-mate ignores its wild kin's alarm
+
                 if ((other.transform.position - transform.position).sqrMagnitude <= radiusSqr)
                     other.ReactToThreat();
             }
+        }
+
+        /// <summary>Taming: true while the player brandishes this species' favorite food within lure range (suppresses the proximity flee).</summary>
+        private bool IsLuredByFood(PlayerReferences player)
+        {
+            if (!Definition.Tameable)
+                return false;
+
+            if ((player.transform.position - transform.position).sqrMagnitude > FoodLureRadius * FoodLureRadius)
+                return false;
+
+            if (cachedSelector == null)
+                cachedSelector = player.GetComponent<HotbarSelector>();
+
+            return cachedSelector != null && Definition.IsFavoriteFood(cachedSelector.EquippedItem);
         }
 
         private bool DetectPlayer()
