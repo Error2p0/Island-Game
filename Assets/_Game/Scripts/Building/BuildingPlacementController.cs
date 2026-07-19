@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using IslandGame.Crafting;
 using IslandGame.Data.Building;
 using IslandGame.Data.Crafting;
+using IslandGame.Data.Items;
 using IslandGame.Inventory;
 using IslandGame.Player;
 using IslandGame.Terrain;
@@ -27,6 +28,10 @@ namespace IslandGame.Building
     ///   (wall facing, roof ascending inward/outward) instead of fighting the
     ///   snap. No socket in range → free placement at the hit point, grid-
     ///   rounded (0.5 m XZ / 0.25 m Y) so free-built pieces still line up.
+    ///   Holding the free-place modifier (Left Alt, or a "FreePlace" input
+    ///   action) suppresses BOTH sockets and grid rounding for exact raw-hit
+    ///   placement; validity (overlap + ground support) still applies to the
+    ///   raw pose, and releasing the key restores snapping the same frame.
     ///
     ///   ROTATION — R steps the desired yaw in 45° increments. 45 (not 15 or
     ///   free) because every piece is authored on a rectilinear 2 m grid:
@@ -49,13 +54,20 @@ namespace IslandGame.Building
     ///   registry and calls BuildingPiece.Initialize (registry registration +
     ///   IFunctionalPlaceable.Init, the Phase 1 contract).
     ///
-    ///   COST (Phase 3) — the piece's linked building recipe
-    ///   (RecipeDatabase.FindForPiece) is the price: its requirements are
-    ///   validated live (unaffordable/no-station also turns the ghost red)
-    ///   through CraftingSystem's shared validation, and
-    ///   CraftingSystem.TryConsumeIngredientsFor pays at CONFIRM only — a
-    ///   rejected or invalid placement can never consume anything. Pieces
-    ///   without a linked recipe place free (creative-style content).
+    ///   COST — what a placement consumes depends on how the piece was
+    ///   selected, and each placement pays exactly once, at CONFIRM only:
+    ///     • RECIPE-ARMED (crafting menu Build button): the piece's linked
+    ///       building recipe (RecipeDatabase.FindForPiece) is the price — its
+    ///       requirements are validated live (unaffordable/no-station turns
+    ///       the ghost red) through CraftingSystem's shared validation, and
+    ///       CraftingSystem.TryConsumeIngredientsFor pays atomically.
+    ///       Recipe-less pieces place free (creative-style content).
+    ///     • ITEM-DRIVEN (hotbar item with a PlacedPiece link): ONE unit of
+    ///       the item is the price — the stack embodied its cost when it was
+    ///       obtained, so the linked recipe is deliberately NOT charged on
+    ///       top (that would bill the same piece twice and made item stacks
+    ///       infinite blueprints before this rule existed).
+    ///   A rejected or invalid placement can never consume anything.
     ///
     ///   SELECTION SOURCES — the hotbar item link (Phase 2) still works, and
     ///   the crafting menu's Build button arms a piece directly (ArmPiece).
@@ -104,6 +116,7 @@ namespace IslandGame.Building
         private PlayerReferences references;
         private HotbarSelector selector;
         private CraftingSystem craftingSystem;
+        private InventorySystem inventory;
         private BuildingGhost ghost;
 
         private readonly RaycastHit[] rayBuffer = new RaycastHit[16];
@@ -136,6 +149,10 @@ namespace IslandGame.Building
         private bool costValid = true;
         private string costReason = string.Empty;
 
+        // The hotbar item driving the ghost, null when the piece is
+        // menu-armed. Whichever is set determines what CONFIRM consumes.
+        private ItemDefinition sourceItem;
+
         /// <summary>True while an equipped item is driving a ghost (HUD hooks read these).</summary>
         public bool IsBuildModeActive => activePiece != null;
 
@@ -144,8 +161,8 @@ namespace IslandGame.Building
         public bool GhostValid => hasPose && poseValid && costValid;
         public bool GhostSnapped => hasPose && poseSnapped;
 
-        /// <summary>The building recipe pricing the active piece (null = free/no recipe).</summary>
-        public RecipeDefinition CostRecipe => costRecipe;
+        /// <summary>The building recipe pricing the active piece (null while item-driven — the item is the price — or free/no recipe).</summary>
+        public RecipeDefinition CostRecipe => sourceItem == null ? costRecipe : null;
 
         /// <summary>Why the cost check fails ("Missing 3 × Wood Plank.") — empty while payable. For the future HUD.</summary>
         public string CostReason => costValid ? string.Empty : costReason;
@@ -155,6 +172,7 @@ namespace IslandGame.Building
             references = GetComponent<PlayerReferences>();
             selector = GetComponent<HotbarSelector>();
             craftingSystem = GetComponent<CraftingSystem>();
+            inventory = GetComponent<InventorySystem>();
             ghost = new BuildingGhost(validGhostColor, invalidGhostColor);
         }
 
@@ -219,10 +237,16 @@ namespace IslandGame.Building
 
             Quaternion desiredRotation = Quaternion.Euler(0f, yawSteps * rotationStepDegrees, 0f);
 
-            poseSnapped = TrySnapToSocket(piece, hit.point, desiredRotation, out ghostPosition, out ghostRotation);
+            // Free-place override (hold Alt / "FreePlace"): the ghost tracks
+            // the raw aim hit — no sockets, no grid rounding. Read every
+            // frame, so releasing the key resumes snapping immediately.
+            bool freePlace = references.InputHandler.FreePlaceHeld;
+
+            poseSnapped = !freePlace
+                          && TrySnapToSocket(piece, hit.point, desiredRotation, out ghostPosition, out ghostRotation);
             if (!poseSnapped)
             {
-                ghostPosition = SnapToGrid(hit.point);
+                ghostPosition = freePlace ? hit.point : SnapToGrid(hit.point);
                 ghostRotation = desiredRotation;
             }
 
@@ -242,6 +266,15 @@ namespace IslandGame.Building
 
         private void RefreshCost(BuildingPieceDefinition piece)
         {
+            // Item-driven placement: the stack is the price, so availability
+            // of the item — not the recipe — is what gates the ghost.
+            if (sourceItem != null)
+            {
+                costValid = inventory != null && inventory.GetItemCount(sourceItem) > 0;
+                costReason = costValid ? string.Empty : $"No {sourceItem.DisplayName} left.";
+                return;
+            }
+
             if (piece != costRecipePiece)
             {
                 costRecipePiece = piece;
@@ -268,11 +301,16 @@ namespace IslandGame.Building
         private BuildingPieceDefinition ResolveActivePiece()
         {
             // Menu-armed piece wins; the hotbar item link is the fallback.
+            // sourceItem records WHICH path is active — it decides whether
+            // CONFIRM consumes the item or the recipe.
+            sourceItem = null;
             BuildingPieceDefinition piece = menuArmedPiece;
             if (piece == null)
             {
                 var equipped = selector != null ? selector.EquippedItem : null;
                 piece = equipped != null ? equipped.PlacedPiece : null;
+                if (piece != null)
+                    sourceItem = equipped;
             }
 
             if (piece == null)
@@ -608,10 +646,20 @@ namespace IslandGame.Building
                 return;
             }
 
-            // Pay-at-confirm (Phase 3): revalidates and consumes atomically —
-            // only a placement that is actually happening costs anything.
-            if (costRecipe != null && craftingSystem != null
-                && !craftingSystem.TryConsumeIngredientsFor(costRecipe, out costReason))
+            // Pay-at-confirm: revalidates and consumes atomically — only a
+            // placement that is actually happening costs anything, and each
+            // path pays exactly once (item OR recipe, never both).
+            if (sourceItem != null)
+            {
+                if (inventory == null || inventory.RemoveItem(sourceItem, 1) != 1)
+                {
+                    costValid = false; // ghost turns red with the reason next frame
+                    costReason = $"No {sourceItem.DisplayName} left.";
+                    return;
+                }
+            }
+            else if (costRecipe != null && craftingSystem != null
+                     && !craftingSystem.TryConsumeIngredientsFor(costRecipe, out costReason))
             {
                 costValid = false; // ghost turns red with the reason next frame
                 return;

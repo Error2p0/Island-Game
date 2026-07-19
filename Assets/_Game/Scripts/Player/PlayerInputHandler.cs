@@ -1,6 +1,8 @@
 using System;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
 
 namespace IslandGame.Player
 {
@@ -40,12 +42,56 @@ namespace IslandGame.Player
         public event Action<int> HotbarSlotPressed;
 
         /// <summary>
-        /// True while UI (inventory screen) owns the input: gameplay values read
-        /// as zero/false and gameplay press events are suppressed, so movement,
-        /// look, and actions freeze without any other system needing UI logic.
-        /// Set by the inventory UI controller only.
+        /// True while UI owns the input: gameplay values read as zero/false and
+        /// gameplay press events are suppressed, so movement, look, and actions
+        /// freeze without any other system needing UI logic. Set by UIInputFocus
+        /// (every screen-covering panel); ALSO true on its own while a UI text
+        /// field is being edited, so a text field can never leak keystrokes
+        /// into gameplay even outside a blocking panel.
         /// </summary>
-        public bool GameplayBlocked { get; set; }
+        public bool GameplayBlocked
+        {
+            get => blockedByPanel || IsTextInputFocused;
+            set => blockedByPanel = value;
+        }
+
+        private bool blockedByPanel;
+
+        /// <summary>
+        /// True while a uGUI InputField is being edited (caret active) — the
+        /// keyboard belongs to the text field. The always-available menu
+        /// toggles consult this too: typing "b"/"i"/Tab into a search box must
+        /// never toggle a menu. Cached per frame; the EventSystem is the one
+        /// source of truth, so every current and future text field is covered
+        /// without per-field wiring.
+        /// </summary>
+        public static bool IsTextInputFocused
+        {
+            get
+            {
+                if (Time.frameCount != textFocusFrame)
+                {
+                    textFocusFrame = Time.frameCount;
+                    textFocusCached = ComputeTextInputFocused();
+                }
+
+                return textFocusCached;
+            }
+        }
+
+        private static int textFocusFrame = -1;
+        private static bool textFocusCached;
+
+        private static bool ComputeTextInputFocused()
+        {
+            EventSystem eventSystem = EventSystem.current;
+            GameObject selected = eventSystem != null ? eventSystem.currentSelectedGameObject : null;
+            if (selected == null)
+                return false;
+
+            var field = selected.GetComponent<InputField>();
+            return field != null && field.isFocused;
+        }
 
         public Vector2 MoveInput =>
             !GameplayBlocked && moveAction != null ? moveAction.ReadValue<Vector2>() : Vector2.zero;
@@ -67,14 +113,23 @@ namespace IslandGame.Player
                 ? mineAction.IsPressed()
                 : Mouse.current != null && Mouse.current.leftButton.isPressed);
 
+        /// <summary>True while the deconstruct button is held (optional "Deconstruct" action, else middle mouse — Valheim's remove binding). Gated by GameplayBlocked. Deconstruction is a timed hold, so this is polled like MineHeld rather than raised as a press event.</summary>
+        public bool DeconstructHeld =>
+            !GameplayBlocked && (deconstructAction != null
+                ? deconstructAction.IsPressed()
+                : Mouse.current != null && Mouse.current.middleButton.isPressed);
+
+        /// <summary>True while the free-place modifier is held (optional "FreePlace" action, else Left Alt) — building placement suppresses socket snapping and grid rounding while this is down. Gated by GameplayBlocked.</summary>
+        public bool FreePlaceHeld =>
+            !GameplayBlocked && (freePlaceAction != null
+                ? freePlaceAction.IsPressed()
+                : Keyboard.current != null && Keyboard.current.leftAltKey.isPressed);
+
         /// <summary>Raised on the frame the place button is pressed (optional "Place" action, else right mouse). Gated by GameplayBlocked.</summary>
         public event Action PlacePressed;
 
         /// <summary>Raised when the rotate-building-piece key is pressed (optional "RotatePiece" action, else R). Gated by GameplayBlocked.</summary>
         public event Action RotatePiecePressed;
-
-        /// <summary>Raised when the deconstruct key is pressed (optional "Deconstruct" action, else middle mouse — Valheim's remove button). Gated by GameplayBlocked.</summary>
-        public event Action DeconstructPressed;
 
         /// <summary>Raised when the interact key is pressed (optional "Interact" action, else E). Gated by GameplayBlocked.</summary>
         public event Action InteractPressed;
@@ -105,6 +160,7 @@ namespace IslandGame.Player
         private InputAction rotatePieceAction;
         private InputAction deconstructAction;
         private InputAction interactAction;
+        private InputAction freePlaceAction;
 
         private void Awake()
         {
@@ -136,12 +192,18 @@ namespace IslandGame.Player
             rotatePieceAction = gameplayMap.FindAction("RotatePiece", throwIfNotFound: false);
             deconstructAction = gameplayMap.FindAction("Deconstruct", throwIfNotFound: false);
             interactAction = gameplayMap.FindAction("Interact", throwIfNotFound: false);
+            freePlaceAction = gameplayMap.FindAction("FreePlace", throwIfNotFound: false);
         }
 
         private void Update()
         {
             Keyboard keyboard = Keyboard.current;
             if (keyboard == null)
+                return;
+
+            // A focused text field owns every keystroke — even the menu
+            // toggles below, which otherwise ignore GameplayBlocked.
+            if (IsTextInputFocused)
                 return;
 
             if (toggleInventoryAction == null
@@ -165,9 +227,6 @@ namespace IslandGame.Player
 
             if (rotatePieceAction == null && keyboard.rKey.wasPressedThisFrame)
                 RotatePiecePressed?.Invoke();
-
-            if (deconstructAction == null && Mouse.current != null && Mouse.current.middleButton.wasPressedThisFrame)
-                DeconstructPressed?.Invoke();
 
             if (interactAction == null && keyboard.eKey.wasPressedThisFrame)
                 InteractPressed?.Invoke();
@@ -206,8 +265,6 @@ namespace IslandGame.Player
                 toggleCraftingAction.performed += OnToggleCraftingPerformed;
             if (rotatePieceAction != null)
                 rotatePieceAction.performed += OnRotatePiecePerformed;
-            if (deconstructAction != null)
-                deconstructAction.performed += OnDeconstructPerformed;
             if (interactAction != null)
                 interactAction.performed += OnInteractPerformed;
             gameplayMap.Enable();
@@ -234,8 +291,6 @@ namespace IslandGame.Player
                 toggleCraftingAction.performed -= OnToggleCraftingPerformed;
             if (rotatePieceAction != null)
                 rotatePieceAction.performed -= OnRotatePiecePerformed;
-            if (deconstructAction != null)
-                deconstructAction.performed -= OnDeconstructPerformed;
             if (interactAction != null)
                 interactAction.performed -= OnInteractPerformed;
         }
@@ -258,14 +313,26 @@ namespace IslandGame.Player
                 PronePressed?.Invoke();
         }
 
-        private void OnToggleInventoryPerformed(InputAction.CallbackContext context) =>
-            InventoryTogglePressed?.Invoke();
+        // The toggle handlers ignore GameplayBlocked (closing a menu must
+        // always work) but NOT text focus — keystrokes typed into a field
+        // may never toggle a menu.
+        private void OnToggleInventoryPerformed(InputAction.CallbackContext context)
+        {
+            if (!IsTextInputFocused)
+                InventoryTogglePressed?.Invoke();
+        }
 
-        private void OnToggleCreativeMenuPerformed(InputAction.CallbackContext context) =>
-            CreativeMenuTogglePressed?.Invoke();
+        private void OnToggleCreativeMenuPerformed(InputAction.CallbackContext context)
+        {
+            if (!IsTextInputFocused)
+                CreativeMenuTogglePressed?.Invoke();
+        }
 
-        private void OnToggleCraftingPerformed(InputAction.CallbackContext context) =>
-            CraftingTogglePressed?.Invoke();
+        private void OnToggleCraftingPerformed(InputAction.CallbackContext context)
+        {
+            if (!IsTextInputFocused)
+                CraftingTogglePressed?.Invoke();
+        }
 
         private void OnDropPerformed(InputAction.CallbackContext context)
         {
@@ -283,12 +350,6 @@ namespace IslandGame.Player
         {
             if (!GameplayBlocked)
                 RotatePiecePressed?.Invoke();
-        }
-
-        private void OnDeconstructPerformed(InputAction.CallbackContext context)
-        {
-            if (!GameplayBlocked)
-                DeconstructPressed?.Invoke();
         }
 
         private void OnInteractPerformed(InputAction.CallbackContext context)
